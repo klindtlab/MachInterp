@@ -12,7 +12,7 @@ def random_shuffle(t, N):
 
 
 def subset_sampling(activations, K: int, N: int, quantile: float):
-    n_axes = activations.shape[0]
+    n_units = activations.shape[0]
 
     top_q = max(quantile, 1-quantile)
     bott_q = min(quantile, 1-quantile)
@@ -21,7 +21,7 @@ def subset_sampling(activations, K: int, N: int, quantile: float):
 
     top_subset_id = []
     bottom_subset_id = []
-    for ii in range(n_axes):
+    for ii in range(n_units):
         top_subset_id.append(
             torch.tensor([id for id , a in enumerate(activations[ii])
                           if a > floor[ii]] , dtype=int)
@@ -34,9 +34,9 @@ def subset_sampling(activations, K: int, N: int, quantile: float):
         assert not (len(top_subset_id[ii]) < K+1 )
         assert not (len(bottom_subset_id[ii]) < K+1 )
 
-    top_id = torch.zeros(n_axes, N,  K+1, dtype=int)
-    bottom_id = torch.zeros(n_axes, N,  K+1, dtype=int)
-    for ii in range(n_axes):
+    top_id = torch.zeros(n_units, N,  K+1, dtype=int)
+    bottom_id = torch.zeros(n_units, N,  K+1, dtype=int)
+    for ii in range(n_units):
         top_id[ii] = random_shuffle(top_subset_id[ii], N)[:,:K+1]
         bottom_id[ii] = random_shuffle(bottom_subset_id[ii], N)[:,:K+1]
 
@@ -46,12 +46,12 @@ def subset_sampling(activations, K: int, N: int, quantile: float):
 def sort_top_bottom_id(activations, top_id, bottom_id):
     assert top_id.shape[1]==bottom_id.shape[1]
     N = top_id.shape[1]
-    n_axes = activations.shape[0]
+    n_units = activations.shape[0]
 
     top_subset = torch.zeros_like(top_id)
     bottom_subset = torch.zeros_like(bottom_id)
 
-    for ii in range(n_axes):
+    for ii in range(n_units):
         for jj in range(N):
             top_subset[ii,jj] = activations[ii, top_id[ii,jj]]
             bottom_subset[ii,jj] = activations[ii, bottom_id[ii,jj]]
@@ -59,7 +59,7 @@ def sort_top_bottom_id(activations, top_id, bottom_id):
     top_sort_id = torch.argsort(top_subset, dim=-1, descending=True)
     bottom_sort_id = torch.argsort(bottom_subset, dim=-1, descending=False)
 
-    for ii in range(n_axes):
+    for ii in range(n_units):
         for jj in range(N):
             top_id[ii,jj] = top_id[ii, jj, top_sort_id[ii,jj] ]
             bottom_id[ii,jj] = bottom_id[ii, jj, bottom_sort_id[ii,jj] ]
@@ -135,8 +135,6 @@ def calc_MIS_set(query_set, Explanation_set, sim_metric: callable, alpha=0.16):
     assert query_set[0].shape[0]==Explanation_set[0].shape[0]
     assert query_set[1].shape[0]==Explanation_set[1].shape[0]
     assert query_set[0].shape[0]==query_set[1].shape[0]
-
-    n_unit = query_set[0].shape[0]
 
     (query_plus_set , query_minus_set) = query_set
     (Explanation_plus_set , Explanation_minus_set) = Explanation_set
