@@ -37,7 +37,7 @@ def get_dreamsim(device):
 
     return sim_metric, preprocess_embed_ds
 
-def get_metric(metric_type: str, device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')):
+def get_metric(metric_type: str, device=torch.device("cuda" if torch.cuda.is_available() else 'cpu')):
     assert metric_type in ["dreamsim"]
     
     if metric_type=="dreamsim":
