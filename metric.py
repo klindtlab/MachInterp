@@ -2,6 +2,7 @@ import torch
 
 def get_dreamsim(device):
     from dreamsim import dreamsim
+    import torch.nn.functional as F
 
     model, preprocess = dreamsim(pretrained=True, device=device)
 
