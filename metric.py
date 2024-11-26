@@ -1,7 +1,8 @@
-def get_dreamsim():
+import torch
+
+def get_dreamsim(device):
     from dreamsim import dreamsim
 
-    device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
     model, preprocess = dreamsim(pretrained=True, device=device)
 
     embed_fn = model.embed
@@ -36,8 +37,9 @@ def get_dreamsim():
 
     return sim_metric, preprocess_embed_ds
 
-def get_metric(metric_type: str):
+def get_metric(metric_type: str, device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')):
     assert metric_type in ["dreamsim"]
-
+    
     if metric_type=="dreamsim":
-        return get_dreamsim()
+        return get_dreamsim(device)
+    return None
