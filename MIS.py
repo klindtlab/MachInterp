@@ -67,22 +67,20 @@ def sort_top_bottom_id(activations, top_id, bottom_id):
     return top_id, bottom_id
 
 
-def query_explanation_generation(I_set, activations, K: int=9, N: int=20):
-    n_axes = activations.shape[0]
-    n_samples = I_set.shape[0]
+def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quantile: float=0.2):
+    n_units = activations.shape[0]
     n_dim = I_set.shape[1]
 
-    Explanation_plus_set = torch.zeros(n_axes, N, K, n_dim)
-    Explanation_minus_set = torch.zeros(n_axes, N, K, n_dim)
+    Explanation_plus_set = torch.zeros(n_units, N, K, n_dim)
+    Explanation_minus_set = torch.zeros(n_units, N, K, n_dim)
 
-    query_plus_set = torch.zeros(n_axes, N, n_dim)
-    query_minus_set = torch.zeros(n_axes, N, n_dim)
+    query_plus_set = torch.zeros(n_units, N, n_dim)
+    query_minus_set = torch.zeros(n_units, N, n_dim)
 
-    quantile = 0.1
     top_id , bottom_id = subset_sampling(activations, K=K, N=N, quantile=quantile)
     top_id , bottom_id = sort_top_bottom_id(activations, top_id, bottom_id)
 
-    for ii in range(n_axes):
+    for ii in range(n_units):
         for jj in range(N):
             Explanation_plus_set[ii,jj] = I_set[ top_id[ii,jj,:K] ]
             Explanation_minus_set[ii,jj] = I_set[ bottom_id[ii,jj,:K] ]
