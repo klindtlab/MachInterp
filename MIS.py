@@ -23,10 +23,10 @@ def subset_sampling(activations, K: int, N: int, quantile: float):
     bottom_subset_id = []
     for ii in range(n_units):
         top_subset_id.append(
-            torch.where(activations[ii] > floor[ii])[0]
+            torch.where(activations[ii] >= floor[ii])[0]
         )
         bottom_subset_id.append(
-            torch.where(activations[ii] < ceil[ii])[0]
+            torch.where(activations[ii] <= ceil[ii])[0]
         )
 
         assert not (len(top_subset_id[ii]) < K+1 )
