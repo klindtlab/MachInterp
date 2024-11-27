@@ -11,11 +11,14 @@ def random_shuffle(t, N):
     return t_shuffled
 
 
-def subset_sampling(activations, K: int, N: int, quantile: float):
+def subset_sampling(activations, K: int, N: int, quantile: float | int):
     n_units = activations.shape[0]
-
-    top_q = max(quantile, 1-quantile)
-    bott_q = min(quantile, 1-quantile)
+    if quantile == 0:
+        top_q = 0
+        bott_q = 1
+    else:
+        top_q = max(quantile, 1-quantile)
+        bott_q = min(quantile, 1-quantile)
     floor = torch.quantile(activations, q=top_q, dim=-1)
     ceil = torch.quantile(activations, q=bott_q, dim=-1)
 
