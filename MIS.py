@@ -109,7 +109,7 @@ def s(q, E, sim_metric):
     return a
 
 
-def calc_MIS(query, Explanation, sim_metric: callable, alpha):
+def calc_MIS(query, Explanation, sim_metric: callable, alpha=None):
     E_plus , E_minus = Explanation
     q_plus , q_minus = query
 
@@ -122,10 +122,16 @@ def calc_MIS(query, Explanation, sim_metric: callable, alpha):
     s_minus_plus = torch.tensor([s(q, E, sim_metric) for q , E in zip(q_minus,E_plus) ])
     s_minus_minus = torch.tensor([s(q, E, sim_metric) for q , E in zip(q_minus,E_minus) ])
 
-    d_plus = s_plus_plus - s_plus_minus
-    d_minus = s_minus_plus - s_minus_minus
+    delta_plus = s_plus_plus - s_plus_minus
+    delta_minus = s_minus_plus - s_minus_minus
+    delta_difference = delta_plus - delta_minus
 
-    MIS = torch.sigmoid(alpha * (d_plus - d_minus) )
+    if alpha is None:
+        MIS = delta_difference > 0
+        MIS = MIS / len(MIS)
+        return MIS
+
+    MIS = torch.sigmoid(alpha * delta_difference )
     MIS = torch.mean(MIS)
     return MIS
 
