@@ -127,8 +127,7 @@ def calc_MIS(query, Explanation, sim_metric: callable, alpha=None):
     delta_difference = delta_plus - delta_minus
 
     if alpha is None:
-        MIS = delta_difference > 0
-        MIS = MIS / len(MIS)
+        MIS = torch.sum(delta_difference > 0, dim=-1) / len(delta_difference)
         return MIS
 
     MIS = torch.sigmoid(alpha * delta_difference )
