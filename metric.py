@@ -1,5 +1,36 @@
 import torch
 
+def get_lpips(device):
+    import lpips
+
+    loss_fn = lpips.LPIPS(net='alex')
+
+    preprocess = lpips.im2tensor
+
+    def preprocess_ds(ds, collate_fn: callable=None):
+        from torch.utils.data import DataLoader
+        from functools import partial
+        collate_fn = partial(collate_fn, preprocess=preprocess)
+        ds_loader = DataLoader(ds, batch_size=64,
+                               shuffle=False, num_workers=2*torch.cuda.device_count(),
+                               collate_fn=collate_fn)
+        
+        try:
+            from tqdm.notebook import tqdm
+            loader_loop = tqdm(enumerate(ds_loader), total=len(ds_loader) )
+        except ImportError:
+            loader_loop = enumerate(ds_loader)
+
+        im_tensor=[]
+        for _ , X in loader_loop:
+            im_tensor.append( X.to(device) )
+
+        return im_tensor
+
+
+    return loss_fn
+
+
 def get_dreamsim(device):
     from dreamsim import dreamsim
     import torch.nn.functional as F
