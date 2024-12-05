@@ -2,18 +2,27 @@ import torch
 
 def get_lpips(device):
     import lpips
+    from torchvision.transforms import ToTensor
 
     loss_fn = lpips.LPIPS(net='alex')
+    single_convert = ToTensor()
 
-    preprocess = lpips.im2tensor
+    if device == 'cuda':
+        loss_fn.cuda()
 
-    def preprocess_ds(ds, collate_fn: callable=None):
+    def sim_metric(im_tensor0, im_tensor1):
+        return loss_fn.foward(im_tensor0, im_tensor1)
+
+    def preprocess(im):
+        return single_convert(im).unsqueeze(0)
+
+    def preprocess_ds(ds, collate_fn: callable):
         from torch.utils.data import DataLoader
         from functools import partial
-        collate_fn = partial(collate_fn, preprocess=preprocess)
+        collate_fn_ds = partial(collate_fn, preprocess=preprocess)
         ds_loader = DataLoader(ds, batch_size=64,
                                shuffle=False, num_workers=2*torch.cuda.device_count(),
-                               collate_fn=collate_fn)
+                               collate_fn=collate_fn_ds)
         
         try:
             from tqdm.notebook import tqdm
@@ -21,14 +30,14 @@ def get_lpips(device):
         except ImportError:
             loader_loop = enumerate(ds_loader)
 
-        im_tensor=[]
+        im_tensor_set=[]
         for _ , X in loader_loop:
-            im_tensor.append( X.to(device) )
+            im_tensor_set.append( X.to(device) )
 
-        return im_tensor
+        return torch.cat(im_tensor_set, dim=0)
 
 
-    return loss_fn
+    return sim_metric , preprocess_ds
 
 
 def get_dreamsim(device):
@@ -47,13 +56,13 @@ def get_dreamsim(device):
 
         return F.cosine_similarity(embed1[:, None], embed2[None], dim=-1)
 
-    def preprocess_embed_ds(ds, collate_fn: callable=None):
+    def preprocess_embed_ds(ds, collate_fn: callable):
         from torch.utils.data import DataLoader
         from functools import partial
-        collate_fn = partial(collate_fn, preprocess=preprocess)
+        collate_fn_ds = partial(collate_fn, preprocess=preprocess)
         ds_loader = DataLoader(ds, batch_size=64,
                                shuffle=False, num_workers=2*torch.cuda.device_count(),
-                               collate_fn=collate_fn)
+                               collate_fn=collate_fn_ds)
 
         try:
             from tqdm.notebook import tqdm
@@ -62,8 +71,9 @@ def get_dreamsim(device):
             loader_loop = enumerate(ds_loader)
 
         embedding=[]
-        for _ , X in loader_loop:
-            embedding.append( embed_fn(X.to(device)) )
+        with torch.no_grad():
+            for _ , X in loader_loop:
+                embedding.append( embed_fn(X.to(device)) )
 
         return torch.cat(embedding, dim=0)
 
