@@ -11,7 +11,8 @@ def get_lpips(device):
         loss_fn.cuda()
 
     def sim_metric(im_tensor0, im_tensor1):
-        return loss_fn.foward(im_tensor0, im_tensor1)
+        with torch.no_grad():
+            return loss_fn.foward(im_tensor0, im_tensor1)
 
     def preprocess(im):
         return single_convert(im).unsqueeze(0)
