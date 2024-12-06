@@ -24,7 +24,7 @@ def get_lpips(device):
             for ii, im0 in enumerate(im_tensor0):
                 for jj, im1 in enumerate(im_tensor1):
                     output[ii, jj] = - loss_fn.foward(im0.to(device), im1.to(device).item())
-            
+
         return output
 
     def preprocess(im):
@@ -37,7 +37,7 @@ def get_lpips(device):
         ds_loader = DataLoader(ds, batch_size=64,
                                shuffle=False, num_workers=2*torch.cuda.device_count(),
                                collate_fn=collate_fn_ds)
-        
+
         try:
             from tqdm.notebook import tqdm
             loader_loop = tqdm(enumerate(ds_loader), total=len(ds_loader) )
