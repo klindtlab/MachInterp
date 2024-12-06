@@ -96,10 +96,8 @@ def get_dreamsim(device):
 def get_metric(metric_type: str, device=torch.device("cuda" if torch.cuda.is_available() else 'cpu')):
     metric_type = metric_type.lower()
     assert metric_type in ["dreamsim", "lpips"]
-    device = device.lower()
-    assert device in ['cpu', 'cuda']
 
     if metric_type == "dreamsim":
         return get_dreamsim(device)
     if metric_type == "lpips":
-        return get_dreamsim(device)
+        return get_lpips(device)
