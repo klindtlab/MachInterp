@@ -7,7 +7,7 @@ def get_lpips(device):
     loss_fn = lpips.LPIPS(net='alex')
     single_convert = ToTensor()
 
-    if device == 'cuda':
+    if device in ['cuda' , torch.device("cuda")]:
         loss_fn.cuda()
 
     def sim_metric(im_tensor0, im_tensor1):
