@@ -18,9 +18,14 @@ def get_lpips(device):
         if len(im_tensor1.shape) == 3:
             im_tensor1 = im_tensor1.unsqueeze(0)
 
+        output = torch.zeros(im_tensor0.shape[0], im_tensor1.shape[0], device=device)
 
         with torch.no_grad():
-            return - loss_fn.foward(im_tensor0, im_tensor1)
+            for ii, im0 in enumerate(im_tensor0):
+                for jj, im1 in enumerate(im_tensor1):
+                    output[ii, jj] = loss_fn.foward(im0.to(device), im1.to(device).item())
+            
+        return output
 
     def preprocess(im):
         return single_convert(im).unsqueeze(0)
@@ -91,6 +96,8 @@ def get_dreamsim(device):
 def get_metric(metric_type: str, device=torch.device("cuda" if torch.cuda.is_available() else 'cpu')):
     metric_type = metric_type.lower()
     assert metric_type in ["dreamsim", "lpips"]
+    device = device.lower()
+    assert device in ['cpu', 'cuda']
 
     if metric_type == "dreamsim":
         return get_dreamsim(device)
