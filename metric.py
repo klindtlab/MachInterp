@@ -4,11 +4,8 @@ def get_lpips(device):
     import lpips
     from torchvision.transforms import ToTensor
 
-    loss_fn = lpips.LPIPS(net='alex')
+    loss_fn = lpips.LPIPS(net='alex').to(device)
     single_convert = ToTensor()
-
-    if device in ['cuda' , torch.device("cuda")]:
-        loss_fn.cuda()
 
     def sim_metric(im_tensor0, im_tensor1):
         assert len(im_tensor0.shape) in (3, 4)
@@ -23,7 +20,7 @@ def get_lpips(device):
         with torch.no_grad():
             for ii, im0 in enumerate(im_tensor0):
                 for jj, im1 in enumerate(im_tensor1):
-                    output[ii, jj] = - loss_fn.foward(im0.to(device), im1.to(device).item())
+                    output[ii, jj] = - loss_fn(im0.to(device), im1.to(device).item())
 
         return output
 
