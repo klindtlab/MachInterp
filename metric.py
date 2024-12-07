@@ -1,10 +1,10 @@
 import torch
 
 def get_lpips(device):
-    import lpips
+    from lpips import LPIPS
     from torchvision.transforms import ToTensor
 
-    loss_fn = lpips.LPIPS(net='alex').to(device)
+    loss_fn = LPIPS(net='alex').to(device)
     single_convert = ToTensor()
 
     def sim_metric(im_tensor0, im_tensor1):
