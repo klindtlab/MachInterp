@@ -19,8 +19,7 @@ def get_lpips(device):
 
         with torch.no_grad():
             for ii, im0 in enumerate(im_tensor0):
-                for jj, im1 in enumerate(im_tensor1):
-                    output[ii, jj] = - loss_fn(im0.to(device), im1.to(device)).item()
+                output[ii] = - loss_fn(im0.to(device), im_tensor1.to(device)).squeeze(1,2,3)
 
         return output
 
