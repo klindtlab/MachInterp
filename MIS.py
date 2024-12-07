@@ -70,13 +70,13 @@ def sort_top_bottom_id(activations, top_id, bottom_id):
 
 def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quantile: float=0.2):
     n_units = activations.shape[0]
-    n_dim = I_set.shape[1]
+    I_dim = I_set.shape[1:]
 
-    Explanation_plus_set = torch.zeros(n_units, N, K, n_dim)
-    Explanation_minus_set = torch.zeros(n_units, N, K, n_dim)
+    Explanation_plus_set = torch.zeros(n_units, N, K, *I_dim)
+    Explanation_minus_set = torch.zeros(n_units, N, K, *I_dim)
 
-    query_plus_set = torch.zeros(n_units, N, n_dim)
-    query_minus_set = torch.zeros(n_units, N, n_dim)
+    query_plus_set = torch.zeros(n_units, N, *I_dim)
+    query_minus_set = torch.zeros(n_units, N, *I_dim)
 
     top_id , bottom_id = subset_sampling(activations, K=K, N=N, quantile=quantile)
     top_id , bottom_id = sort_top_bottom_id(activations, top_id, bottom_id)
