@@ -113,9 +113,6 @@ def calc_MIS(query, Explanation, sim_metric: callable, alpha=None):
     E_plus , E_minus = Explanation
     q_plus , q_minus = query
 
-    print(q_plus.shape)
-    print(E_plus.shape)
-
     assert q_plus.shape[0]==E_plus.shape[0]
     assert q_minus.shape[0]==E_minus.shape[0]
     assert q_plus.shape[0]==q_minus.shape[0]
