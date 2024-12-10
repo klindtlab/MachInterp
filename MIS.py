@@ -13,7 +13,7 @@ def random_shuffle(t, N):
 
 def subset_sampling(activations, K: int, N: int, quantile: float | int):
     n_units = activations.shape[0]
-    if quantile == 0:
+    if quantile == 0 or quantile is None:
         top_q = 0
         bott_q = 1
     else:
@@ -69,6 +69,36 @@ def sort_top_bottom_id(activations, top_id, bottom_id):
 
 
 def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quantile: float=0.2):
+    """
+    Generate query and explanations for ALL psychophysics tasks.
+
+    Input:
+    - 'I_set': Torch tensor of preprocessed image dataset. Its first 
+               dimension is length of the dataset, while subsequent dimensions depend on
+               the model-specific input processing. For example, with Dreamsim
+               preprocessing which converts a (WxHx3) image to a (1x1792) embedding, the
+               dimensions of corresponding 'I_set' will be (ds_length x 1792).
+               For LPIPS preprocess which recasts a (WxHx3) image to a (3xWxH) tensor,
+               the tensor dimensions of corresponding 'I_set' will be (ds_length x W x H x 3).
+
+    - 'activations': A two dimensional tensor (n_units x ds_length ) that
+                     contains activations of every image along every unit.
+
+    - 'K': The number of images in each (+ , -) explanation set per task.
+    - 'N': Number of tasks per unit.
+    - 'quantile': A scalar between 0 and 1. The quantile range over the activations for pschophysics query/explanation generation
+
+    Internal:
+    - 'I_dim': Dimensions of a single preprocessed image sample
+
+    Output:
+    - 'query_set': A tuple ('query_plus_set', 'query_minus_set') containing batched queries for all psychophysics tasks.
+        - 'query_plus_set' , 'query_minus_set': torch tensor of shape (n_units, N, *I_dim)
+
+    - 'Explanation_set': A tuple ('Explanation_plus_set', 'Explanation_minus_set') containing batched explanations for all psychophysics tasks.
+        - 'Explanation_plus_set', 'Explanation_minus_set': torch tensor of shape (n_units, N, K, *I_dim)
+    """
+
     n_units = activations.shape[0]
     I_dim = I_set.shape[1:]
 
@@ -109,7 +139,27 @@ def s(q, E, sim_metric):
     return a
 
 
-def calc_MIS(query, Explanation, sim_metric: callable, alpha=None):
+def calc_MIS(query, Explanation, sim_metric: callable, alpha: float|None=None):
+    """
+    Calculate Mechanistic Interpretability Score (MIS) for SINGLE UNIT
+
+    Input:
+    - 'query': A tuple ('q_plus', 'q_minus') containing queries of all psychophysics tasks for SINGLE UNIT.
+        - 'q_plus', 'q_minus': Torch tensor of shape (N , *I_dim)
+
+    - 'Explanation': A tuple ('E_plus' , 'E_minus') containing explanations of all psychophysics tasks for SINGLE UNIT.
+        - 'E_plus', 'E_minus': Torch tensor of shape (N , K, *I_dim)
+
+    - 'sim_metric': Callable similarity metric function.
+
+    - 'alpha': Parametre for Sigmoid function in MIS calculation. If None, defaults to unnormalized psychophysics accuracy.
+
+    Output:
+    - 'MIS': Torch scalar of MIS of SINGLE UNIT
+
+    """
+
+
     E_plus , E_minus = Explanation
     q_plus , q_minus = query
 
@@ -136,6 +186,25 @@ def calc_MIS(query, Explanation, sim_metric: callable, alpha=None):
 
 
 def calc_MIS_set(query_set, Explanation_set, sim_metric: callable, alpha=0.16):
+    """
+    Wrapper for callable 'calc_MIS' to compute MIS of ALL UNITS
+
+    Input:
+    - 'query_set': A tuple ('q_plus_set', 'q_minus_set') containing query processed images of every psychophysics task for ALL UNITS.
+        - 'q_plus_set', 'q_minus_set': Torch tensor of shape (n_units, N , *I_dim)
+
+    - 'Explanation_set': A tuple ('Explanation_plus_set', 'Explanation_minus_set') containing explanation processed images
+                         of every psychophysics task for ALL UNITS.
+        - 'Explanation_plus_set', 'Explanation_minus_set': Torch tensor of shape (n_units, N, K, *I_dim)
+
+    - 'sim_metric': Callable similarity metric function to be passed into callable 'calc_MIS'
+
+    - 'alpha': Parametre for Sigmoid function in MIS calculation, passed into callable 'calc_MIS'
+
+    Output:
+    - 'MIS_set': Torch tensor of shape (n_units,). Contains MIS of ALL UNITS.
+    """
+
     assert len(query_set)==2
     assert len(Explanation_set)==2
     assert query_set[0].shape[0]==Explanation_set[0].shape[0]
