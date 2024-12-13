@@ -22,24 +22,30 @@ def subset_sampling(activations, K: int, N: int, quantile: float | int):
     floor = torch.quantile(activations, q=top_q, dim=-1)
     ceil = torch.quantile(activations, q=bott_q, dim=-1)
 
-    top_subset_id = []
-    bottom_subset_id = []
-    for ii in range(n_units):
-        top_subset_id.append(
-            torch.where(activations[ii] >= floor[ii])[0]
-        )
-        bottom_subset_id.append(
-            torch.where(activations[ii] <= ceil[ii])[0]
-        )
+    def single_sampling_top(act_i, floor_i):
+        return torch.where(act_i >= floor_i)[0]
 
-        assert not (len(top_subset_id[ii]) < K+1 )
-        assert not (len(bottom_subset_id[ii]) < K+1 )
+    def single_sampling_bottom(act_i, ceil_i):
+        return torch.where(act_i <= ceil_i)[0]
+
+    top_subset_id = torch.vmap(single_sampling_top)(activations, floor)
+    bottom_subset_id = torch.vmap(single_sampling_bottom)(activations, ceil)
+
+    assert not (len(top_subset_id[0]) < K+1 )
+    assert not (len(bottom_subset_id[0]) < K+1 )
+
+    def single_shuffle(t):
+        return t[torch.randperm(t.shape[-1])[:K+1] ]
+    single_shuffle_v = torch.vmap(single_shuffle)
+
+    def N_shuffle(t):
+        return single_shuffle_v(t.repeat(N))
 
     top_id = torch.zeros(n_units, N,  K+1, dtype=int)
     bottom_id = torch.zeros(n_units, N,  K+1, dtype=int)
     for ii in range(n_units):
-        top_id[ii] = random_shuffle(top_subset_id[ii], N)[:,:K+1]
-        bottom_id[ii] = random_shuffle(bottom_subset_id[ii], N)[:,:K+1]
+        top_id[ii] = N_shuffle(top_subset_id[ii])
+        bottom_id[ii] = N_shuffle(bottom_subset_id[ii])
 
     return top_id , bottom_id
 
