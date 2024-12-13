@@ -6,17 +6,21 @@ def single_shuffle(t):
 
 
 def subset_sampling(activations, K: int, N: int, quantile: float | int):
-    if quantile == 0 or quantile is None:
-        top_q = 0
-        bott_q = 1
-    else:
-        top_q = max(quantile, 1-quantile)
-        bott_q = min(quantile, 1-quantile)
-    floor = torch.quantile(activations, q=top_q, dim=-1)
-    ceil = torch.quantile(activations, q=bott_q, dim=-1)
+    n_units = activations.shape[0]
+    n_samples = activations.shape[1]
+    import math
+    subset_length = math.ceil(n_samples * quantile)
 
-    def single_sampling_top(act_i, floor_i):
-        sub_id = torch.where(act_i >= floor_i)[0]
+    activations_id_sort = torch.argsort(activations, dim=-1, descending=False)
+
+    top_subset_id = torch.flip(activations_id_sort, [-1])[:, :subset_length]
+    bottom_subset_id = activations_id_sort[:, :subset_length]
+
+
+
+
+
+    def single_sampling(act_i, floor_i):
         sub_act = act_i[sub_id]
         single_shuffle_v = torch.vmap(lambda x: single_shuffle(sub_act)[:K+1], randomness="different")
         output_id, output_act = single_shuffle_v(torch.empty(N))
