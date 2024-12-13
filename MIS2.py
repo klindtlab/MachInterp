@@ -130,16 +130,17 @@ def aggregate(im_sim):
     if a.shape[0]==1 and len(a.shape)==1:
         return a[0]
     return a
+aggregate_batch = torch.vmap(aggregate)
 
 
-def s(q, E, sim_metric):
-    sim = sim_metric(q,E) # similarity should be inverse relationship to distance metric
-    a = aggregate(sim)
+def s(q_batch, E_batch, sim_metric_v):
+    sim_batch = sim_metric_v(q_batch, E_batch) # similarity should be inverse relationship to distance metric
+    a_batch = aggregate_batch(sim_batch)
 
-    return a
+    return a_batch
 
 
-def calc_MIS(query, Explanation, sim_metric: callable, alpha: float|None=None):
+def calc_MIS(query, Explanation, sim_metric_v: callable, alpha: float|None=None):
     """
     Calculate Mechanistic Interpretability Score (MIS) for SINGLE UNIT
 
@@ -167,10 +168,10 @@ def calc_MIS(query, Explanation, sim_metric: callable, alpha: float|None=None):
     assert q_minus.shape[0]==E_minus.shape[0]
     assert q_plus.shape[0]==q_minus.shape[0]
 
-    s_plus_plus = torch.tensor([s(q, E, sim_metric) for q , E in zip(q_plus,E_plus) ])
-    s_plus_minus = torch.tensor([s(q, E, sim_metric) for q , E in zip(q_plus,E_minus) ])
-    s_minus_plus = torch.tensor([s(q, E, sim_metric) for q , E in zip(q_minus,E_plus) ])
-    s_minus_minus = torch.tensor([s(q, E, sim_metric) for q , E in zip(q_minus,E_minus) ])
+    s_plus_plus = s(q_plus, E_plus, sim_metric_v)
+    s_plus_minus = s(q_plus, E_minus, sim_metric_v)
+    s_minus_plus = s(q_minus, E_plus, sim_metric_v)
+    s_minus_minus = s(q_minus, E_minus, sim_metric_v)
 
     delta_plus = s_plus_plus - s_plus_minus
     delta_minus = s_minus_plus - s_minus_minus
@@ -218,7 +219,7 @@ def calc_MIS_set(query_set, Explanation_set, sim_metric: callable, alpha=0.16):
     Explanation_set = [ (E_plus , E_minus) for (E_plus , E_minus) in zip(Explanation_plus_set , Explanation_minus_set) ]
 
     MIS_set = torch.tensor([
-        calc_MIS(query, Explanation, sim_metric, alpha)
+        calc_MIS(query, Explanation, torch.vmap(sim_metric), alpha)
         for (query , Explanation) in zip(query_set , Explanation_set)
     ])
 
