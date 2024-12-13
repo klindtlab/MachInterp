@@ -17,26 +17,26 @@ def subset_sampling(activations, K: int, N: int, quantile: float | int):
 
     def single_sampling_top(act_i, floor_i):
         sub_id = torch.where(act_i >= floor_i)[0]
-        single_shuffle_v = torch.vmap(lambda x: single_shuffle(sub_id)[:K+1], randomness="different")
+        sub_act = act_i[sub_id]
+        single_shuffle_v = torch.vmap(lambda x: single_shuffle(sub_act)[:K+1], randomness="different")
         output_id, output_act = single_shuffle_v(torch.empty(N))
         return output_id, output_act
 
     def single_sampling_bottom(act_i, ceil_i):
         sub_id = torch.where(act_i <= ceil_i)[0]
-        single_shuffle_v = torch.vmap(lambda x: single_shuffle(sub_id)[:K+1], randomness="different")
+        sub_act = act_i[sub_id]
+        single_shuffle_v = torch.vmap(lambda x: single_shuffle(sub_act)[:K+1], randomness="different")
         output_id, output_act = single_shuffle_v(torch.empty(N))
         return output_id, output_act
 
-    top_id, top_activations = torch.vmap(single_sampling_top)(activations, floor)
-    bottom_id, bottom_activations = torch.vmap(single_sampling_bottom)(activations, ceil)
+    top_id, top_subset = torch.vmap(single_sampling_top)(activations, floor)
+    bottom_id, bottom_subset = torch.vmap(single_sampling_bottom)(activations, ceil)
 
-    return (top_id, bottom_id), (top_activations, bottom_activations)
+    return (top_id, bottom_id), (top_subset, bottom_subset)
 
-top_arg_sort = torch.vmap(lambda x: )
-
-def top_id_argsort(top_id_i, top_act_i):
-    id_sort_id = torch.argsort(top_act_i, dim=-1, descending=True)
-    return top_id_i[id_sort_id]
+def assign(t, id):
+    return t[id]
+assign_vv = torch.vmap(torch.vmap(assign))
 
 def sort_top_bottom_id(top_bottom_id, top_bottom_activations):
     (top_id , bottom_id) = top_bottom_id
@@ -44,24 +44,12 @@ def sort_top_bottom_id(top_bottom_id, top_bottom_activations):
 
     assert top_id.shape[1] == bottom_id.shape[1]
     N = top_id.shape[1]
-    n_units = activations.shape[0]
 
-    top_subset = torch.zeros_like(top_id)
-    bottom_subset = torch.zeros_like(bottom_id)
+    top_sort_id = torch.argsort(top_activations, dim=-1, descending=True)
+    bottom_sort_id = torch.argsort(bottom_activations, dim=-1, descending=False)
 
-
-    for ii in range(n_units):
-        for jj in range(N):
-            top_subset[ii,jj] = activations[ii, top_id[ii,jj]]
-            bottom_subset[ii,jj] = activations[ii, bottom_id[ii,jj]]
-
-    top_sort_id = torch.argsort(top_subset, dim=-1, descending=True)
-    bottom_sort_id = torch.argsort(bottom_subset, dim=-1, descending=False)
-
-    for ii in range(n_units):
-        for jj in range(N):
-            top_id[ii,jj] = top_id[ii, jj, top_sort_id[ii,jj] ]
-            bottom_id[ii,jj] = bottom_id[ii, jj, bottom_sort_id[ii,jj] ]
+    top_id = assign_vv(top_id, top_sort_id)
+    bottom_id = assign_vv(bottom_id, bottom_sort_id)
 
     return top_id, bottom_id
 
@@ -106,8 +94,8 @@ def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quanti
     query_plus_set = torch.zeros(n_units, N, *I_dim)
     query_minus_set = torch.zeros(n_units, N, *I_dim)
 
-    top_id , bottom_id = subset_sampling(activations, K=K, N=N, quantile=quantile)
-    top_id , bottom_id = sort_top_bottom_id(activations, top_id, bottom_id)
+    top_bottom_id, top_bottom_activations = subset_sampling(activations, K=K, N=N, quantile=quantile)
+    top_id , bottom_id = sort_top_bottom_id(top_bottom_id, top_bottom_activations)
 
     for ii in range(n_units):
         for jj in range(N):
