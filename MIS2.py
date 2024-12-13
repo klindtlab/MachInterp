@@ -1,18 +1,11 @@
 import torch
 
-def random_shuffle(t, N):
-    if len(t.shape)==2:
-        t = t.squeeze(0)
-
-    t_shuffled = torch.zeros(N, t.shape[-1], dtype=int)
-    for ii in range(N):
-        t_shuffled[ii] = t[torch.randperm(t.shape[-1])]
-
-    return t_shuffled
+def single_shuffle(t):
+    shuffle_id = torch.randperm(t.shape[-1])
+    return shuffle_id, t[shuffle_id]
 
 
 def subset_sampling(activations, K: int, N: int, quantile: float | int):
-    n_units = activations.shape[0]
     if quantile == 0 or quantile is None:
         top_q = 0
         bott_q = 1
@@ -23,40 +16,39 @@ def subset_sampling(activations, K: int, N: int, quantile: float | int):
     ceil = torch.quantile(activations, q=bott_q, dim=-1)
 
     def single_sampling_top(act_i, floor_i):
-        return torch.where(act_i >= floor_i)[0]
+        sub_id = torch.where(act_i >= floor_i)[0]
+        single_shuffle_v = torch.vmap(lambda x: single_shuffle(sub_id)[:K+1], randomness="different")
+        output_id, output_act = single_shuffle_v(torch.empty(N))
+        return output_id, output_act
 
     def single_sampling_bottom(act_i, ceil_i):
-        return torch.where(act_i <= ceil_i)[0]
+        sub_id = torch.where(act_i <= ceil_i)[0]
+        single_shuffle_v = torch.vmap(lambda x: single_shuffle(sub_id)[:K+1], randomness="different")
+        output_id, output_act = single_shuffle_v(torch.empty(N))
+        return output_id, output_act
 
-    top_subset_id = torch.vmap(single_sampling_top)(activations, floor)
-    bottom_subset_id = torch.vmap(single_sampling_bottom)(activations, ceil)
+    top_id, top_activations = torch.vmap(single_sampling_top)(activations, floor)
+    bottom_id, bottom_activations = torch.vmap(single_sampling_bottom)(activations, ceil)
 
-    assert not (len(top_subset_id[0]) < K+1 )
-    assert not (len(bottom_subset_id[0]) < K+1 )
+    return (top_id, bottom_id), (top_activations, bottom_activations)
 
-    def single_shuffle(t):
-        return t[torch.randperm(t.shape[-1])[:K+1] ]
-    single_shuffle_v = torch.vmap(single_shuffle)
+top_arg_sort = torch.vmap(lambda x: )
 
-    def N_shuffle(t):
-        return single_shuffle_v(t.repeat(N))
+def top_id_argsort(top_id_i, top_act_i):
+    id_sort_id = torch.argsort(top_act_i, dim=-1, descending=True)
+    return top_id_i[id_sort_id]
 
-    top_id = torch.zeros(n_units, N,  K+1, dtype=int)
-    bottom_id = torch.zeros(n_units, N,  K+1, dtype=int)
-    for ii in range(n_units):
-        top_id[ii] = N_shuffle(top_subset_id[ii])
-        bottom_id[ii] = N_shuffle(bottom_subset_id[ii])
+def sort_top_bottom_id(top_bottom_id, top_bottom_activations):
+    (top_id , bottom_id) = top_bottom_id
+    (top_activations , bottom_activations) = top_bottom_activations
 
-    return top_id , bottom_id
-
-
-def sort_top_bottom_id(activations, top_id, bottom_id):
-    assert top_id.shape[1]==bottom_id.shape[1]
+    assert top_id.shape[1] == bottom_id.shape[1]
     N = top_id.shape[1]
     n_units = activations.shape[0]
 
     top_subset = torch.zeros_like(top_id)
     bottom_subset = torch.zeros_like(bottom_id)
+
 
     for ii in range(n_units):
         for jj in range(N):
