@@ -55,7 +55,8 @@ def sort_top_bottom_id(top_bottom_id, top_bottom_activations):
     return top_id, bottom_id
 
 
-def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quantile: float=0.2):
+def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quantile: float=0.2,
+                                activations_id_sort=None):
     """
     Generate query and explanations for ALL psychophysics tasks.
 
@@ -85,7 +86,8 @@ def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quanti
     - 'Explanation_set': A tuple ('Explanation_plus_set', 'Explanation_minus_set') containing batched explanations for all psychophysics tasks.
         - 'Explanation_plus_set', 'Explanation_minus_set': torch tensor of shape (n_units, N, K, *I_dim)
     """
-    top_bottom_id, top_bottom_activations = subset_sampling(activations, K=K, N=N, quantile=quantile)
+    top_bottom_id, top_bottom_activations = subset_sampling(activations, K=K, N=N, quantile=quantile,
+                                                            activations_id_sort=activations_id_sort)
     top_id , bottom_id = sort_top_bottom_id(top_bottom_id, top_bottom_activations)
 
     Explanation_plus_set = get_I_subset(I_set, top_id[:,:,:K])
