@@ -8,7 +8,8 @@ def single_shuffle(t_id, t, n):
 
 def get(set, x):
     return set[x]
-get_I_subset = torch.vmap(torch.vmap( get, in_dims=(None, 0) ), in_dims=(None, 0))
+get_I_subset1 = torch.vmap( get, in_dims=(None, 0) )
+get_I_subset2 = torch.vmap(get_I_subset1, in_dims=(None, 0))
 get_v = torch.vmap(get)
 get_vv = torch.vmap(get_v)
 
@@ -90,14 +91,17 @@ def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quanti
                                                             activations_id_sort=activations_id_sort)
     top_id , bottom_id = sort_top_bottom_id(top_bottom_id, top_bottom_activations)
 
-    Explanation_plus_set = get_I_subset(I_set, top_id[:,:,:K])
-    Explanation_minus_set = get_I_subset(I_set, bottom_id[:,:,:K])
+    Explanation_plus_set = get_I_subset2(I_set, top_id[:,:,:K])
+    Explanation_minus_set = get_I_subset2(I_set, bottom_id[:,:,:K])
 
     print(Explanation_plus_set.shape)
-    #print(Explanation_minus_set.shape)
+    print(Explanation_minus_set.shape)
 
-    query_plus_set = get_I_subset(I_set, top_id[:,:,K])
-    query_minus_set = get_I_subset(I_set, bottom_id[:,:,K])
+    query_plus_set = get_I_subset1(I_set, top_id[:,:,K])
+    query_minus_set = get_I_subset1(I_set, bottom_id[:,:,K])
+
+    print(query_plus_set.shape)
+    print(query_minus_set.shape)
 
     query_set = (query_plus_set, query_minus_set)
     Explanation_set = (Explanation_plus_set, Explanation_minus_set)
