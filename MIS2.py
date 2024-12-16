@@ -201,6 +201,7 @@ def calc_MIS_set(query_set, Explanation_set, sim_metric: callable, alpha=0.16):
     return MIS_set
 
 def run_psychophysics(I_set, activations, K: int=9, N: int=20, quantile: float=0.2, sim_metric: callable, alpha=0.16):
+    
     query_set , Explanation_set = query_explanation_generation(I_set, activations, K=K, N=N, quantile=quantile)
     MIS_set = calc_MIS_set(query_set, Explanation_set, sim_metric, alpha=alpha)
 
