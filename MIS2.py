@@ -94,14 +94,8 @@ def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quanti
     Explanation_plus_set = get_I_subset2(I_set, top_id[:,:,:K])
     Explanation_minus_set = get_I_subset2(I_set, bottom_id[:,:,:K])
 
-    print(Explanation_plus_set.shape)
-    print(Explanation_minus_set.shape)
-
     query_plus_set = get_I_subset1(I_set, top_id[:,:,K])
     query_minus_set = get_I_subset1(I_set, bottom_id[:,:,K])
-
-    print(query_plus_set.shape)
-    print(query_minus_set.shape)
 
     query_set = (query_plus_set, query_minus_set)
     Explanation_set = (Explanation_plus_set, Explanation_minus_set)
