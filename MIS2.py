@@ -1,59 +1,56 @@
 import torch
 
-def single_shuffle(t):
-    shuffle_id = torch.randperm(t.shape[-1])
-    return shuffle_id, t[shuffle_id]
+def single_shuffle(t_id, t, n):
+    assert t_id.shape[-1]==t.shape[-1]
 
+    shuffle_id = torch.randperm(t.shape[-1])[:n]
+    return t_id[shuffle_id], t[shuffle_id]
 
-def subset_sampling(activations, K: int, N: int, quantile: float | int):
-    n_units = activations.shape[0]
+def get(set, x):
+    return set[x]
+get_I_subset = torch.vmap(torch.vmap( get, in_dims=(None, 0) ), in_dims=(None, 0))
+get_v = torch.vmap(get)
+get_vv = torch.vmap(get_v)
+
+def subset_sampling(activations, K: int, N: int, quantile: float | int, activations_id_sort = None):
     n_samples = activations.shape[1]
     import math
     subset_length = math.ceil(n_samples * quantile)
+    assert not subset_length < K+1
+    
+    if activations_id_sort is None:
+        activations_id_sort = torch.argsort(activations, dim=-1, descending=False)
 
-    activations_id_sort = torch.argsort(activations, dim=-1, descending=False)
+    top_set_id = torch.flip(activations_id_sort, [-1])[:, :subset_length]
+    bottom_set_id = activations_id_sort[:, :subset_length]
 
-    top_subset_id = torch.flip(activations_id_sort, [-1])[:, :subset_length]
-    bottom_subset_id = activations_id_sort[:, :subset_length]
+    top_set_act = get_v(activations, top_set_id)
+    bottom_set_act = get_v(activations, bottom_set_id)
 
+    def single_sampling(id_i, act_i):
+        single_shuffle_v = torch.vmap(lambda x: single_shuffle(id_i, act_i, K+1), randomness="different")
+        output_id , output_act = single_shuffle_v(torch.empty(N))
+        return output_id , output_act
+    sampling = torch.vmap(single_sampling, randomness="different")
 
+    top_id , top_act = sampling(top_set_id, top_set_act)
+    bottom_id , bottom_act = sampling(bottom_set_id, bottom_set_act)
 
+    return (top_id , bottom_id) , (top_act , bottom_act)
 
-
-    def single_sampling(act_i, floor_i):
-        sub_act = act_i[sub_id]
-        single_shuffle_v = torch.vmap(lambda x: single_shuffle(sub_act)[:K+1], randomness="different")
-        output_id, output_act = single_shuffle_v(torch.empty(N))
-        return output_id, output_act
-
-    def single_sampling_bottom(act_i, ceil_i):
-        sub_id = torch.where(act_i <= ceil_i)[0]
-        sub_act = act_i[sub_id]
-        single_shuffle_v = torch.vmap(lambda x: single_shuffle(sub_act)[:K+1], randomness="different")
-        output_id, output_act = single_shuffle_v(torch.empty(N))
-        return output_id, output_act
-
-    top_id, top_subset = torch.vmap(single_sampling_top)(activations, floor)
-    bottom_id, bottom_subset = torch.vmap(single_sampling_bottom)(activations, ceil)
-
-    return (top_id, bottom_id), (top_subset, bottom_subset)
-
-def assign(t, id):
-    return t[id]
-assign_vv = torch.vmap(torch.vmap(assign))
 
 def sort_top_bottom_id(top_bottom_id, top_bottom_activations):
     (top_id , bottom_id) = top_bottom_id
-    (top_activations , bottom_activations) = top_bottom_activations
+    (top_act , bottom_act) = top_bottom_activations
+    assert top_id.shape == bottom_id.shape
+    assert top_act.shape == top_id.shape
+    assert top_act.shape == bottom_act.shape
 
-    assert top_id.shape[1] == bottom_id.shape[1]
-    N = top_id.shape[1]
+    top_sort_id = torch.argsort(top_act, dim=-1, descending=True)
+    bottom_sort_id = torch.argsort(bottom_act, dim=-1, descending=False)
 
-    top_sort_id = torch.argsort(top_activations, dim=-1, descending=True)
-    bottom_sort_id = torch.argsort(bottom_activations, dim=-1, descending=False)
-
-    top_id = assign_vv(top_id, top_sort_id)
-    bottom_id = assign_vv(bottom_id, bottom_sort_id)
+    top_id = get_vv(top_id, top_sort_id)
+    bottom_id = get_vv(bottom_id, bottom_sort_id)
 
     return top_id, bottom_id
 
@@ -88,26 +85,14 @@ def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quanti
     - 'Explanation_set': A tuple ('Explanation_plus_set', 'Explanation_minus_set') containing batched explanations for all psychophysics tasks.
         - 'Explanation_plus_set', 'Explanation_minus_set': torch tensor of shape (n_units, N, K, *I_dim)
     """
-
-    n_units = activations.shape[0]
-    I_dim = I_set.shape[1:]
-
-    Explanation_plus_set = torch.zeros(n_units, N, K, *I_dim)
-    Explanation_minus_set = torch.zeros(n_units, N, K, *I_dim)
-
-    query_plus_set = torch.zeros(n_units, N, *I_dim)
-    query_minus_set = torch.zeros(n_units, N, *I_dim)
-
     top_bottom_id, top_bottom_activations = subset_sampling(activations, K=K, N=N, quantile=quantile)
     top_id , bottom_id = sort_top_bottom_id(top_bottom_id, top_bottom_activations)
 
-    for ii in range(n_units):
-        for jj in range(N):
-            Explanation_plus_set[ii,jj] = I_set[ top_id[ii,jj,:K] ]
-            Explanation_minus_set[ii,jj] = I_set[ bottom_id[ii,jj,:K] ]
+    Explanation_plus_set = get_I_subset(I_set, top_id[:,:,:K])
+    Explanation_minus_set = get_I_subset(I_set, bottom_id[:,:,:K])
 
-            query_plus_set[ii,jj] = I_set[ top_id[ii,jj,K] ]
-            query_minus_set[ii,jj] = I_set[ bottom_id[ii,jj,K] ]
+    query_plus_set = get_I_subset(I_set, top_id[:,:,K])
+    query_minus_set = get_I_subset(I_set, bottom_id[:,:,K])
 
     query_set = (query_plus_set, query_minus_set)
     Explanation_set = (Explanation_plus_set, Explanation_minus_set)
@@ -212,5 +197,11 @@ def calc_MIS_set(query_set, Explanation_set, sim_metric: callable, alpha=0.16):
         calc_MIS(query, Explanation, torch.vmap(sim_metric), alpha)
         for (query , Explanation) in zip(query_set , Explanation_set)
     ])
+
+    return MIS_set
+
+def run_psychophysics(I_set, activations, K: int=9, N: int=20, quantile: float=0.2, sim_metric: callable, alpha=0.16):
+    query_set , Explanation_set = query_explanation_generation(I_set, activations, K=K, N=N, quantile=quantile)
+    MIS_set = calc_MIS_set(query_set, Explanation_set, sim_metric, alpha=alpha)
 
     return MIS_set
