@@ -1,18 +1,14 @@
 import torch
 
-def single_shuffle(t_id, t, n):
-    assert t_id.shape[-1]==t.shape[-1]
-
-    shuffle_id = torch.randperm(t.shape[-1])[:n]
-    return t_id[shuffle_id], t[shuffle_id]
 
 def get(set, x):
     return set[x]
-get_I_subset1 = torch.vmap( get, in_dims=(None, 0) )
-get_I_subset2 = torch.vmap(get_I_subset1, in_dims=(None, 0))
-get_act_subset = torch.vmap( torch.vmap(get, in_dims=(None, 0)) )
-get_v = torch.vmap(get)
-get_vv = torch.vmap(get_v)
+get_I_subset1 = torch.vmap( get, in_dims=(None, 0) ) # for set: (n_samples , *I_dim) and x: (n_units, N), return: (n_units, N, *I_dim)
+get_I_subset2 = torch.vmap(get_I_subset1, in_dims=(None, 0)) # for set: (n_samples , *I_dim) and x: (n_units, N, K+1), return: (n_units, N, K+1, *I_dim)
+get_act_subset = torch.vmap( torch.vmap(get, in_dims=(None, 0)) ) # for set: (n_units, n_samples) and x: (n_units, N, K+1), return: (n_units, N, K+1, n_samples)
+get_v = torch.vmap(get) 
+get_vv = torch.vmap(get_v) # for set: (n_units, N, L) and x: (n_units, N, K+1), return: (n_units, N, K+1)
+
 
 draw_k = torch.vmap(lambda x, L, k: torch.randperm(L)[:k], randomness="different",
                     in_dims=(0, None, None))
@@ -145,7 +141,6 @@ def calc_MIS(query, Explanation, sim_metric_v: callable, alpha: float|None=None)
     - 'MIS': Torch scalar of MIS of SINGLE UNIT
 
     """
-
 
     E_plus , E_minus = Explanation
     q_plus , q_minus = query
