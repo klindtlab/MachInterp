@@ -21,10 +21,10 @@ def subset_sampling(activations, K: int, N: int, quantile: float | int, activati
     assert not subset_length < K+1
 
     if quantile==1:
-        top_id = torch.tensor([ draw_k(torch.empty(N), n_samples, K+1) 
-                               for _ in range(n_units) ])
-        bottom_id = torch.tensor([ draw_k(torch.empty(N), n_samples, K+1) 
-                                  for _ in range(n_units) ])
+        top_id = torch.stack([ draw_k(torch.empty(N), n_samples, K+1) 
+                               for _ in range(n_units) ], dim=0)
+        bottom_id = torch.stack([ draw_k(torch.empty(N), n_samples, K+1) 
+                                  for _ in range(n_units) ], dim=0)
         return top_id , bottom_id
 
     if activations_id_sort is None:
@@ -33,10 +33,10 @@ def subset_sampling(activations, K: int, N: int, quantile: float | int, activati
     top_set_id = torch.flip(activations_id_sort, [-1])[:, :subset_length]
     bottom_set_id = activations_id_sort[:, :subset_length]
 
-    top_id = torch.tensor([ draw_k(torch.empty(N), subset_length, K+1) 
-                               for _ in range(n_units) ])
-    bottom_id = torch.tensor([ draw_k(torch.empty(N), subset_length, K+1) 
-                               for _ in range(n_units) ])
+    top_id = torch.stack([ draw_k(torch.empty(N), subset_length, K+1) 
+                          for _ in range(n_units) ] , dim=0)
+    bottom_id = torch.stack([ draw_k(torch.empty(N), subset_length, K+1)
+                             for _ in range(n_units) ] , dim=0)
     
     top_id = get_act_subset(top_set_id , top_id)
     bottom_id = get_act_subset(bottom_set_id , bottom_id)
