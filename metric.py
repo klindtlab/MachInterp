@@ -7,6 +7,7 @@ from torchvision.transforms import ToTensor
 def get_lpips(device):
     from lpips import LPIPS
     loss_fn = LPIPS(net='alex').to(device)
+    to_tensor_inst = ToTensor()
 
     def sim_metric(im_tensor0, im_tensor1):
         assert len(im_tensor0.shape) in (3, 4)
@@ -22,7 +23,7 @@ def get_lpips(device):
         return output
 
     def preprocess(im):
-        return (2 * ToTensor(im) - 1).unsqueeze(0)
+        return (2 * to_tensor_inst(im) - 1).unsqueeze(0)
     
     def collator(batch: list):
         output = [preprocess(image) for image in batch]
@@ -66,7 +67,6 @@ def get_dreamsim(device):
     
     def collator(batch: list):
         output = [preprocess(image) for image in batch]
-
         return torch.cat(output, dim=0)
 
     def preprocess_embed_ds(ds):
