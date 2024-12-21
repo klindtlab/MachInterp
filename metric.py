@@ -115,15 +115,23 @@ class Metric_Preprocess:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, device):
-        # Update the value every time the instance is called
-        self.device = device
 
-    def get_metric(self, metric_type: str):
-        if metric_type in self._data.keys():
-            return self._metric[metric_type]
-        
-        self._metric[metric_type] , self._preprocess[metric_type] = get_metric(metric_type , self.device)
-        return self._metric[metric_type]
+    def __init__(self, metric_type: str, device: str):
+        # Update the value every time the instance is called
+        key = (metric_type, device)
+        if not key in self._metric.keys():
+            self._metric[key] , self._preprocess[key] = get_metric(metric_type , device)
+
+
+    def __call__(self, metric_type: str, device: str):
+        key = (metric_type, device)
+        if not key in self._metric.keys():
+            self._metric[key] , self._preprocess[key] = get_metric(metric_type , device)
+        return self._metric[key] , self._preprocess[key]
     
-    def 
+    def process(self, dataset, metric_type: str, device: str):
+        key = (metric_type, device)
+        if not key in self._metric.keys():
+            self._metric[key] , self._preprocess[key] = get_metric(metric_type , device)
+        
+        return self._preprocess[key](dataset)

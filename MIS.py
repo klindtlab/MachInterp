@@ -17,7 +17,7 @@ get_vv = torch.vmap(get_v) # for set: (n_units, N, L) and x: (n_units, N, K+1), 
 draw_k = torch.vmap(lambda x, L, k: torch.randperm(L)[:k], randomness="different",
                     in_dims=(0, None, None))
 
-def subset_sampling(activations, K: int, N: int, quantile: float | int, activations_id_sort = None):
+def subset_sampling(activations, K: int, N: int, quantile: float | int, activations_sort_id = None):
     n_units = activations.shape[0]
     n_samples = activations.shape[1]
     subset_length = math.ceil(n_samples * quantile)
@@ -30,11 +30,11 @@ def subset_sampling(activations, K: int, N: int, quantile: float | int, activati
                                   for _ in range(n_units) ], dim=0)
         return top_id , bottom_id
 
-    if activations_id_sort is None:
-        activations_id_sort = torch.argsort(activations, dim=-1, descending=False)
+    if activations_sort_id is None:
+        activations_sort_id = torch.argsort(activations, dim=-1, descending=False)
 
-    top_set_id = torch.flip(activations_id_sort, [-1])[:, :subset_length]
-    bottom_set_id = activations_id_sort[:, :subset_length]
+    top_set_id = torch.flip(activations_sort_id, [-1])[:, :subset_length]
+    bottom_set_id = activations_sort_id[:, :subset_length]
 
     top_id = torch.stack([ draw_k(torch.empty(N), subset_length, K+1) 
                           for _ in range(n_units) ] , dim=0)
@@ -64,7 +64,7 @@ def sort_subset_id(top_id, bottom_id, activations):
 
 
 def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quantile: float=0.2,
-                                activations_id_sort=None):
+                                activations_sort_id=None):
     """
     Generate query and explanations for ALL psychophysics tasks.
 
@@ -95,7 +95,7 @@ def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quanti
         - 'Explanation_plus_set', 'Explanation_minus_set': torch tensor of shape (n_units, N, K, *I_dim)
     """
     top_id , bottom_id = subset_sampling(activations, K=K, N=N, quantile=quantile,
-                                                            activations_id_sort=activations_id_sort)
+                                                            activations_sort_id=activations_sort_id)
     top_id , bottom_id = sort_subset_id(top_id, bottom_id, activations)
 
     Explanation_plus_set = get_I_subset2(I_set, top_id[:,:,:K])
@@ -217,42 +217,53 @@ def run_psychophysics(I_set, activations, sim_metric: callable, K: int=9, N: int
     return MIS_set
 
 class task_config:
-    def __init__(self, image_set: list[Image], activations: Tensor, preprocessed: dict={}):
+    def __init__(self, image_set: list[Image], activations: Tensor,
+                 device: str, processed: dict={}):
+
         self.x_data = image_set
         self.y_data = activations
         self.y_sort_id = torch.argsort(activations, dim=0, descending=False)
-        self.preprocessed = preprocessed
+        self.device = device
+        self.processed = processed
 
     def __getitem__(self, index):
         return self.x_data[index] , self.y_data[index]
     
-    def get_set(self, preprocess_type: str=None):
-        if preprocess_type is None:
+    def get_data(self, metric_type: str=None):
+        if metric_type is None:
             return self.X_data
-        if preprocess_type in self.preprocessed.keys():
-            return self.preprocessed[preprocess_type]
+        if metric_type in self.processed.keys():
+            return self.processed[metric_type]
         
-        _ , preprocess_fn = get_metric(metric_type=preprocess_type)
-        self.preprocessed[preprocess_type] = preprocess_fn(self.x_data)
-        return self.preprocessed[preprocess_type]
+        self.processed[metric_type] = process(self.x_data, metric_type, self.device)
+        return self.processed[metric_type]
+    
+    def get_target
 
 
-def do_the_whole_thing(X: list[Image], Y: Tensor, metric_type: str, task_config: dict, device):
+def do_the_whole_thing(task_data: task_config, metric_type: str,
+                       K: int, N: int, quantile: float, alpha: float=None):
     '''
     Input
         X: List of PIL Images (NxHXWXC)
         Y: Tensor (NxK)
     '''
-    if isinstance(X, Image):
-        X = [X]
-    assert len(X) == Y.shape[0]
-    K = task_config["K"]
-    N = task_config["N"]
-    quantile = task_config["quantile"]
-    alpha = task_config["alpha"]
+    device = task_data.device
+
+    I_set = task_data.get_data(metric_type=metric_type)
+    activations = torch.transpose(torch.task_data.y_data, 0 ,1)
+    activations_sort_id = torch.transpose(torch.task_data.y_sort_id, 0 ,1)
+    sim_metric = get_metric(metric_type, device)
+
+    query_set , Explanation_set = query_explanation_generation(I_set, activations, K=K, N=N, quantile=quantile, activations_id_sort=activations_sort_id)
+    MIS_set = calc_MIS_set(query_set, Explanation_set, sim_metric, alpha=alpha)
+
+    return MIS_set
 
 
-    sim_metric , = get_metric(metric_type, device)
+
+
+
 
 
 
