@@ -17,6 +17,7 @@ def get_lpips(device):
         if len(im_tensor1.shape) == 3:
             im_tensor1 = im_tensor1.unsqueeze(0)
 
+        loss_fn.eval()
         with torch.no_grad():
             output = - loss_fn(im_tensor0.to(device), im_tensor1.to(device))
 
@@ -98,3 +99,31 @@ def get_metric(metric_type: str, device=torch.device("cuda" if torch.cuda.is_ava
         return get_dreamsim(device)
     if metric_type == "lpips":
         return get_lpips(device)
+    
+
+class Metric_Preprocess:
+    """
+    A simple mutable singleton class.
+    """
+    _instance = None
+    _metric = {}
+    _preprocess = {}
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            # Create a new instance if one doesn't already exist
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self, device):
+        # Update the value every time the instance is called
+        self.device = device
+
+    def get_metric(self, metric_type: str):
+        if metric_type in self._data.keys():
+            return self._metric[metric_type]
+        
+        self._metric[metric_type] , self._preprocess[metric_type] = get_metric(metric_type , self.device)
+        return self._metric[metric_type]
+    
+    def 

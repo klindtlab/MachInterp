@@ -1,4 +1,8 @@
 import torch
+from torch import Tensor
+from PIL import Image
+from metric import get_metric
+import math
 
 
 def get(set, x):
@@ -16,7 +20,6 @@ draw_k = torch.vmap(lambda x, L, k: torch.randperm(L)[:k], randomness="different
 def subset_sampling(activations, K: int, N: int, quantile: float | int, activations_id_sort = None):
     n_units = activations.shape[0]
     n_samples = activations.shape[1]
-    import math
     subset_length = math.ceil(n_samples * quantile)
     assert not subset_length < K+1
 
@@ -212,3 +215,44 @@ def run_psychophysics(I_set, activations, sim_metric: callable, K: int=9, N: int
     MIS_set = calc_MIS_set(query_set, Explanation_set, sim_metric, alpha=alpha)
 
     return MIS_set
+
+class task_config:
+    def __init__(self, image_set: list[Image], activations: Tensor, preprocessed: dict={}):
+        self.x_data = image_set
+        self.y_data = activations
+        self.y_sort_id = torch.argsort(activations, dim=0, descending=False)
+        self.preprocessed = preprocessed
+
+    def __getitem__(self, index):
+        return self.x_data[index] , self.y_data[index]
+    
+    def get_set(self, preprocess_type: str=None):
+        if preprocess_type is None:
+            return self.X_data
+        if preprocess_type in self.preprocessed.keys():
+            return self.preprocessed[preprocess_type]
+        
+        _ , preprocess_fn = get_metric(metric_type=preprocess_type)
+        self.preprocessed[preprocess_type] = preprocess_fn(self.x_data)
+        return self.preprocessed[preprocess_type]
+
+
+def do_the_whole_thing(X: list[Image], Y: Tensor, metric_type: str, task_config: dict, device):
+    '''
+    Input
+        X: List of PIL Images (NxHXWXC)
+        Y: Tensor (NxK)
+    '''
+    if isinstance(X, Image):
+        X = [X]
+    assert len(X) == Y.shape[0]
+    K = task_config["K"]
+    N = task_config["N"]
+    quantile = task_config["quantile"]
+    alpha = task_config["alpha"]
+
+
+    sim_metric , = get_metric(metric_type, device)
+
+
+
