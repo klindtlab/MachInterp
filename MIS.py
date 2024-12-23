@@ -3,6 +3,7 @@ from torch import Tensor
 from PIL import Image
 from metric import get_metric
 import math
+from metric import process
 
 
 def get(set, x):
@@ -209,12 +210,6 @@ def calc_MIS_set(query_set, Explanation_set, sim_metric: callable, alpha=0.16):
 
     return MIS_set
 
-def run_psychophysics(I_set, activations, sim_metric: callable, K: int=9, N: int=20, quantile: float=0.2, alpha=0.16):
-    
-    query_set , Explanation_set = query_explanation_generation(I_set, activations, K=K, N=N, quantile=quantile)
-    MIS_set = calc_MIS_set(query_set, Explanation_set, sim_metric, alpha=alpha)
-
-    return MIS_set
 
 class task_config:
     def __init__(self, image_set: list[Image], activations: Tensor,
@@ -238,11 +233,12 @@ class task_config:
         self.processed[metric_type] = process(self.x_data, metric_type, self.device)
         return self.processed[metric_type]
     
-    def get_target
+    def get_target(self):
+        return self.y_data
 
 
-def do_the_whole_thing(task_data: task_config, metric_type: str,
-                       K: int, N: int, quantile: float, alpha: float=None):
+def run_psychophysics(task_data: task_config, metric_type: str,
+                      K: int, N: int, quantile: float, alpha: float=None):
     '''
     Input
         X: List of PIL Images (NxHXWXC)
@@ -251,19 +247,13 @@ def do_the_whole_thing(task_data: task_config, metric_type: str,
     device = task_data.device
 
     I_set = task_data.get_data(metric_type=metric_type)
-    activations = torch.transpose(torch.task_data.y_data, 0 ,1)
-    activations_sort_id = torch.transpose(torch.task_data.y_sort_id, 0 ,1)
+    activations = torch.transpose(task_data.y_data, 0 ,1)
+    activations_sort_id = torch.transpose(task_data.y_sort_id, 0 ,1)
     sim_metric = get_metric(metric_type, device)
 
     query_set , Explanation_set = query_explanation_generation(I_set, activations, K=K, N=N, quantile=quantile, activations_id_sort=activations_sort_id)
     MIS_set = calc_MIS_set(query_set, Explanation_set, sim_metric, alpha=alpha)
+    del query_set
+    del Explanation_set
 
     return MIS_set
-
-
-
-
-
-
-
-

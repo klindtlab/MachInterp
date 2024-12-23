@@ -42,6 +42,7 @@ def get_lpips(device):
             loader_loop = enumerate(ds_loader)
 
         im_tensor_set=[]
+        print("Preprocessing images for LPIPS...")
         for _ , X in loader_loop:
             im_tensor_set.append( X.to(device) )
 
@@ -81,6 +82,7 @@ def get_dreamsim(device):
         except ImportError:
             loader_loop = enumerate(ds_loader)
 
+        print("Preprocessing images for DREAMSIM...")
         embedding=[]
         model.eval()
         with torch.no_grad():
@@ -91,7 +93,8 @@ def get_dreamsim(device):
 
     return sim_metric, preprocess_embed_ds
 
-def get_metric(metric_type: str, device=torch.device("cuda" if torch.cuda.is_available() else 'cpu')):
+
+def get_metric_preprocess(metric_type: str, device=torch.device("cuda" if torch.cuda.is_available() else 'cpu')):
     metric_type = metric_type.lower()
     assert metric_type in ["dreamsim", "lpips"]
 
@@ -116,17 +119,18 @@ class Metric_Preprocess:
         return cls._instance
 
 
-    def __init__(self, metric_type: str, device: str):
+    def __init__(self, metric_type: str=None, device: str=None):
         # Update the value every time the instance is called
-        key = (metric_type, device)
-        if not key in self._metric.keys():
-            self._metric[key] , self._preprocess[key] = get_metric(metric_type , device)
+        if metric_type is not None and device is not None:
+            key = (metric_type, device)
+            if not key in self._metric.keys():
+                self._metric[key] , self._preprocess[key] = get_metric_preprocess(metric_type , device)
 
 
     def __call__(self, metric_type: str, device: str):
         key = (metric_type, device)
         if not key in self._metric.keys():
-            self._metric[key] , self._preprocess[key] = get_metric(metric_type , device)
+            self._metric[key] , self._preprocess[key] = get_metric_preprocess(metric_type , device)
         return self._metric[key] , self._preprocess[key]
     
     def process(self, dataset, metric_type: str, device: str):
@@ -135,3 +139,19 @@ class Metric_Preprocess:
             self._metric[key] , self._preprocess[key] = get_metric(metric_type , device)
         
         return self._preprocess[key](dataset)
+    
+    def get_metric(self, metric_type: str, device: str):
+        key = (metric_type, device)
+        if not key in self._metric.keys():
+            self._metric[key] , self._preprocess[key] = get_metric(metric_type , device)
+        return self._preprocess[key]
+    
+
+def process(dataset, metric_type: str, device):
+    wrapper = Metric_Preprocess()
+    return wrapper.process(dataset, metric_type, device)
+
+
+def get_metric(metric_type: str, device):
+    wrapper = Metric_Preprocess()
+    return wrapper.get_metric(metric_type, device)
