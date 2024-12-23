@@ -251,7 +251,7 @@ def run_psychophysics(task_data: task_config, metric_type: str,
     activations_sort_id = torch.transpose(task_data.y_sort_id, 0 ,1)
     sim_metric = get_metric(metric_type, device)
 
-    query_set , Explanation_set = query_explanation_generation(I_set, activations, K=K, N=N, quantile=quantile, activations_id_sort=activations_sort_id)
+    query_set , Explanation_set = query_explanation_generation(I_set, activations, K=K, N=N, quantile=quantile, activations_sort_id=activations_sort_id)
     MIS_set = calc_MIS_set(query_set, Explanation_set, sim_metric, alpha=alpha)
     del query_set
     del Explanation_set
