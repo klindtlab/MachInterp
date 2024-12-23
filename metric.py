@@ -144,7 +144,7 @@ class Metric_Preprocess:
         key = (metric_type, device)
         if not key in self._metric.keys():
             self._metric[key] , self._preprocess[key] = get_metric_preprocess(metric_type , device)
-        return self._preprocess[key]
+        return self._metric[key]
     
 
 def process(dataset, metric_type: str, device):
