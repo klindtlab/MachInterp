@@ -214,15 +214,20 @@ def calc_MIS_set(query_set, Explanation_set, sim_metric: callable, alpha=0.16):
 class task_config:
     def __init__(self, image_set: list[Image], activations: Tensor,
                  device: str, processed: dict={}):
+        '''
+        Input
+            X: List of PIL Images (NxHXWXC)
+            Y: Tensor (NxK)
+        '''
 
         self.x_data = image_set
-        self.y_data = activations
-        self.y_sort_id = torch.argsort(activations, dim=0, descending=False)
+        self.y_data = torch.transpose(activations , 0, 1)
+        self.y_sort_id = torch.argsort(self.y_data, dim=1, descending=False)
         self.device = device
         self.processed = processed
 
     def __getitem__(self, index):
-        return self.x_data[index] , self.y_data[index]
+        return self.x_data[index] , self.y_data[:,index]
     
     def get_data(self, metric_type: str=None):
         if metric_type is None:
@@ -238,21 +243,14 @@ class task_config:
 
 
 def run_psychophysics(task_data: task_config, metric_type: str,
-                      K: int, N: int, quantile: float, alpha: float=None):
-    '''
-    Input
-        X: List of PIL Images (NxHXWXC)
-        Y: Tensor (NxK)
-    '''
-    device = task_data.device
+                      K: int, N: int, quantile: float, alpha: float=None, metric=None):
 
     I_set = task_data.get_data(metric_type=metric_type)
-    activations = torch.transpose(task_data.y_data, 0 ,1)
-    activations_sort_id = torch.transpose(task_data.y_sort_id, 0 ,1)
-    sim_metric = get_metric(metric_type, device)
+    if metric is None:
+        metric = get_metric(metric_type, task_data.device)
 
-    query_set , Explanation_set = query_explanation_generation(I_set, activations, K=K, N=N, quantile=quantile, activations_sort_id=activations_sort_id)
-    MIS_set = calc_MIS_set(query_set, Explanation_set, sim_metric, alpha=alpha)
+    query_set , Explanation_set = query_explanation_generation(I_set, task_data.y_data, K=K, N=N, quantile=quantile, activations_sort_id=task_data.y_sort_id)
+    MIS_set = calc_MIS_set(query_set, Explanation_set, metric, alpha=alpha)
     del query_set
     del Explanation_set
 
