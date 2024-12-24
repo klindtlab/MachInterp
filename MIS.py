@@ -137,7 +137,7 @@ def calc_MIS(query, Explanation, sim_metric_v: callable, alpha: float|None=None)
     - 'Explanation': A tuple ('E_plus' , 'E_minus') containing explanations of all psychophysics tasks for SINGLE UNIT.
         - 'E_plus', 'E_minus': Torch tensor of shape (N , K, *I_dim)
 
-    - 'sim_metric': Callable similarity metric function.
+    - 'sim_metric_v': Callable similarity metric function that is vectorized with torch vmap
 
     - 'alpha': Parametre for Sigmoid function in MIS calculation. If None, defaults to unnormalized psychophysics accuracy.
 
