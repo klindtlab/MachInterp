@@ -108,6 +108,9 @@ def query_explanation_generation(I_set, activations, K: int=9, N: int=20, quanti
     query_set = (query_plus_set, query_minus_set)
     Explanation_set = (Explanation_plus_set, Explanation_minus_set)
 
+    del top_id
+    del bottom_id
+
     return query_set , Explanation_set
 
 
@@ -245,11 +248,13 @@ class task_config:
 def run_psychophysics(task_data: task_config, metric_type: str,
                       K: int, N: int, quantile: float, alpha: float=None, metric=None):
 
-    I_set = task_data.get_data(metric_type=metric_type)
     if metric is None:
         metric = get_metric(metric_type, task_data.device)
 
-    query_set , Explanation_set = query_explanation_generation(I_set, task_data.y_data, K=K, N=N, quantile=quantile, activations_sort_id=task_data.y_sort_id)
+    query_set , Explanation_set = \
+        query_explanation_generation(I_set=task_data.get_data(metric_type=metric_type), 
+                                     activations=task_data.y_data, K=K, N=N, quantile=quantile, 
+                                     activations_sort_id=task_data.y_sort_id)
     MIS_set = calc_MIS_set(query_set, Explanation_set, metric, alpha=alpha)
     del query_set
     del Explanation_set
