@@ -45,6 +45,9 @@ def subset_sampling(activations, K: int, N: int, quantile: float | int, activati
     top_id = get_act_subset(top_set_id , top_id)
     bottom_id = get_act_subset(bottom_set_id , bottom_id)
 
+    del top_set_id
+    del bottom_set_id
+
     return top_id , bottom_id
 
 
