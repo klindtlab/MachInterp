@@ -4,6 +4,9 @@ from PIL import Image
 from metric import get_metric
 import math
 from metric import process
+import jax
+from jax import random as jrandom
+import numpy as np
 
 
 def get(set, x):
@@ -15,20 +18,41 @@ get_v = torch.vmap(get)
 get_vv = torch.vmap(get_v) # for set: (n_units, N, L) and x: (n_units, N, K+1), return: (n_units, N, K+1)
 
 
-draw_k = torch.vmap(lambda x, L, k: torch.randperm(L)[:k], randomness="different",
-                    in_dims=(0, None, None))
+jdraw_k = jax.vmap(lambda key, L, k: jrandom.choice(key, L, shape=(k,), replace=False),
+                  in_axes=(0, None, None) )
 
-def subset_sampling(activations, K: int, N: int, quantile: float | int, activations_sort_id = None):
+def draw_k_batch(seed: int, L: int, k: int, N: int, n_units: int, device):
+    key = jrandom.PRNGKey(seed)
+    keys = jrandom.split(key, num=(2, n_units, N))
+    top_id = [
+              torch.from_numpy(
+                               np.array(jdraw_k(keys[0][i] , L, k ) )
+                               )
+              for i in range(n_units)
+             ]
+    bottom_id = [
+                 torch.from_numpy(
+                                  np.array(jdraw_k(keys[1][i] , L, k ) )
+                                  )
+                 for i in range(n_units)
+                ]
+
+    top_id = torch.stack(top_id, dim=0).to(device)
+    bottom_id = torch.stack(bottom_id, dim=0).to(device)
+
+    return top_id , bottom_id
+
+
+def subset_sampling(seed: int, activations, K: int, N: int, quantile: float | int, device, activations_sort_id = None):
     n_units = activations.shape[0]
     n_samples = activations.shape[1]
     subset_length = math.ceil(n_samples * quantile)
     assert not subset_length < K+1
 
     if quantile==1:
-        top_id = torch.stack([ draw_k(torch.empty(N), n_samples, K+1) 
-                               for _ in range(n_units) ], dim=0)
-        bottom_id = torch.stack([ draw_k(torch.empty(N), n_samples, K+1) 
-                                  for _ in range(n_units) ], dim=0)
+        top_id , bottom_id = draw_k_batch(seed=seed, L=subset_length, 
+                                          k=K+1, N=N, n_units=n_units, 
+                                          device=device)
         return top_id , bottom_id
 
     if activations_sort_id is None:
@@ -37,10 +61,9 @@ def subset_sampling(activations, K: int, N: int, quantile: float | int, activati
     top_set_id = torch.flip(activations_sort_id, [-1])[:, :subset_length]
     bottom_set_id = activations_sort_id[:, :subset_length]
 
-    top_id = torch.stack([ draw_k(torch.empty(N), subset_length, K+1) 
-                          for _ in range(n_units) ] , dim=0)
-    bottom_id = torch.stack([ draw_k(torch.empty(N), subset_length, K+1)
-                             for _ in range(n_units) ] , dim=0)
+    top_id , bottom_id = draw_k_batch(seed=seed, L=subset_length, 
+                                      k=K+1, N=N, n_units=n_units, 
+                                      device=device)
     
     top_id = get_act_subset(top_set_id , top_id)
     bottom_id = get_act_subset(bottom_set_id , bottom_id)
@@ -246,6 +269,10 @@ class task_config:
     
     def get_target(self):
         return self.y_data
+    
+    def replace_y(self, activations):
+        self.y_data = torch.transpose(activations , 0, 1)
+        self.y_sort_id = torch.argsort(self.y_data, dim=1, descending=False)
 
 
 def run_psychophysics(task_data: task_config, metric_type: str,
