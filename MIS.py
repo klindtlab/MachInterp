@@ -231,7 +231,7 @@ class task_config:
     
     def get_data(self, metric_type: str=None):
         if metric_type is None:
-            return self.X_data
+            return self.x_data
         if metric_type in self.processed.keys():
             return self.processed[metric_type]
         
