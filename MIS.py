@@ -6,6 +6,8 @@ import math
 from metric import process
 import jax
 from jax import random as jrandom
+from jax import numpy as jnp
+from jax import vmap as jvmap
 import numpy as np
 
 
@@ -18,29 +20,12 @@ get_v = torch.vmap(get)
 get_vv = torch.vmap(get_v) # for set: (n_units, N, L) and x: (n_units, N, K+1), return: (n_units, N, K+1)
 
 
-jdraw_k = jax.vmap(lambda key, L, k: jrandom.choice(key, L, shape=(k,), replace=False),
+jdraw_k = jvmap(lambda key, L, k: jrandom.choice(key, L, shape=(k,), replace=False),
                   in_axes=(0, None, None) )
+# jdraw_k_batch_v = jvmap(jdraw_k, in_axes=(0, None, None))
 
-def draw_k_batch(seed: int, n_units: int, L: int, N: int, k: int, device):
-    key = jrandom.PRNGKey(seed)
-    keys = jrandom.split(key, num=(2, n_units, N))
-    top_id = [
-              torch.from_numpy(
-                               np.array(jdraw_k(keys[0][i] , L, k ) )
-                               )
-              for i in range(n_units)
-             ]
-    bottom_id = [
-                 torch.from_numpy(
-                                  np.array(jdraw_k(keys[1][i] , L, k ) )
-                                  )
-                 for i in range(n_units)
-                ]
-
-    top_id = torch.stack(top_id, dim=0).to(device)
-    bottom_id = torch.stack(bottom_id, dim=0).to(device)
-
-    return top_id , bottom_id
+def jdraw_k_batch(keys_set, L, k):
+    return jnp.stack([jdraw_k(keys, L, k) for keys in keys_set], axis=0)
 
 
 def subset_sampling(seed: int, activations, K: int, N: int, 
@@ -52,9 +37,13 @@ def subset_sampling(seed: int, activations, K: int, N: int,
     subset_length = math.ceil(n_samples * quantile)
     assert not subset_length < K+1
 
+    key = jrandom.PRNGKey(seed)
+    keys_set = jrandom.split(key, num=(2, n_units, N))
+
+    top_id  = torch.from_numpy(np.array(jdraw_k_batch(keys_set[0], L=subset_length, k=K+1))).to(device)
+    bottom_id = torch.from_numpy(np.array(jdraw_k_batch(keys_set[1], L=subset_length, k=K+1))).to(device)
+
     if quantile==1:
-        top_id , bottom_id = draw_k_batch(seed=seed, n_units=n_units, L=subset_length, 
-                                          N=N, k=K+1, device=device)
         return top_id , bottom_id
 
     if activations_sort_id is None:
@@ -62,9 +51,6 @@ def subset_sampling(seed: int, activations, K: int, N: int,
 
     top_set_id = torch.flip(activations_sort_id, [-1])[:, :subset_length]
     bottom_set_id = activations_sort_id[:, :subset_length]
-
-    top_id , bottom_id = draw_k_batch(seed=seed, n_units=n_units, L=subset_length, 
-                                      N=N, k=K+1, device=device)
     
     top_id = get_act_subset(top_set_id , top_id)
     bottom_id = get_act_subset(bottom_set_id , bottom_id)
@@ -92,8 +78,9 @@ def sort_subset_id(top_id, bottom_id, activations):
 
 
 def query_explanation_generation(seed: int, I_set, activations, 
-                                 K: int=9, N: int=20, 
-                                 quantile: float=0.2,
+                                 K: int, N: int, 
+                                 quantile: float,
+                                 device,
                                  activations_sort_id=None):
     """
     Generate query and explanations for ALL psychophysics tasks.
@@ -125,7 +112,7 @@ def query_explanation_generation(seed: int, I_set, activations,
         - 'Explanation_plus_set', 'Explanation_minus_set': torch tensor of shape (n_units, N, K, *I_dim)
     """
     top_id , bottom_id = subset_sampling(seed, activations, K=K, 
-                                         N=N, quantile=quantile,
+                                         N=N, quantile=quantile, device=device,
                                          activations_sort_id=activations_sort_id)
     
     top_id , bottom_id = sort_subset_id(top_id, bottom_id, activations)
@@ -282,13 +269,16 @@ class task_config:
 
 def run_psychophysics(seed: int, task_data: task_config, metric_type: str,
                       K: int, N: int, quantile: float, alpha: float=None, metric=None):
+    
+    device = task_data.device
 
     if metric is None:
         metric = get_metric(metric_type, task_data.device)
 
     query_set , Explanation_set = \
         query_explanation_generation(seed=seed, I_set=task_data.get_data(metric_type=metric_type), 
-                                     activations=task_data.y_data, K=K, N=N, quantile=quantile, 
+                                     activations=task_data.y_data, K=K, N=N,
+                                     quantile=quantile, device=device,
                                      activations_sort_id=task_data.y_sort_id)
     
     MIS_set = calc_MIS_set(query_set, Explanation_set, metric, alpha=alpha)
