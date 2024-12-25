@@ -30,7 +30,7 @@ def jdraw_k_batch(keys_set, L, k):
 
 def subset_sampling(seed: int, activations, K: int, N: int, 
                     quantile: float | int, device, 
-                    activations_sort_id = None):
+                    activations_sort_id=None):
 
     n_units = activations.shape[0]
     n_samples = activations.shape[1]
@@ -42,6 +42,9 @@ def subset_sampling(seed: int, activations, K: int, N: int,
 
     top_id  = torch.from_numpy(np.array(jdraw_k_batch(keys_set[0], L=subset_length, k=K+1))).to(device)
     bottom_id = torch.from_numpy(np.array(jdraw_k_batch(keys_set[1], L=subset_length, k=K+1))).to(device)
+
+    del key
+    del keys_set
 
     if quantile==1:
         return top_id , bottom_id
@@ -73,6 +76,9 @@ def sort_subset_id(top_id, bottom_id, activations):
 
     top_id = get_vv(top_id, top_sort_id)
     bottom_id = get_vv(bottom_id, bottom_sort_id)
+
+    del top_sort_id
+    del bottom_sort_id
 
     return top_id, bottom_id
 
@@ -116,6 +122,9 @@ def query_explanation_generation(seed: int, I_set, activations,
                                          activations_sort_id=activations_sort_id)
     
     top_id , bottom_id = sort_subset_id(top_id, bottom_id, activations)
+
+    print(top_id.shape)
+    print(bottom_id.shape)
 
     Explanation_plus_set = get_I_subset2(I_set, top_id[:,:,:K])
     Explanation_minus_set = get_I_subset2(I_set, bottom_id[:,:,:K])
