@@ -83,8 +83,11 @@ def subset_sampling(seed: int, activations, K: int, N: int,
     subset_length = math.ceil(n_samples * quantile)
     assert not subset_length < K+1
 
-    top_id = torch.stack([torch_draw_k(torch.empty(N), subset_length, K+1) for _ in range(n_units)], dim=0)
-    bottom_id = torch.stack([torch_draw_k(torch.empty(N), subset_length, K+1) for _ in range(n_units)], dim=0 )
+    #top_id = torch.stack([torch_draw_k(torch.empty(N), subset_length, K+1) for _ in range(n_units)], dim=0)
+    #bottom_id = torch.stack([torch_draw_k(torch.empty(N), subset_length, K+1) for _ in range(n_units)], dim=0 )
+
+    top_id = torch.randint(0, subset_length, size=(n_units, N, K+1))
+    bottom_id = torch.randint(0, subset_length, size=(n_units, N, K+1))
 
     if quantile==1:
         del activations
