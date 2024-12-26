@@ -20,6 +20,8 @@ get_act_subset = torch.vmap( torch.vmap(get, in_dims=(None, 0)) ) # for set: (n_
 get_v = torch.vmap(get) 
 get_vv = torch.vmap(get_v) # for set: (n_units, N, L) and x: (n_units, N, K+1), return: (n_units, N, K+1)
 
+torch_draw_k = torch.vmap(lambda x, L, k: torch.randperm(L)[:,k], 
+                          in_dims=(0, None, None), randomness='different' )
 
 jdraw_k = jvmap(lambda key, L, k: jrandom.choice(key, L, shape=(k,), replace=False),
                   in_axes=(0, None, None) )
@@ -29,7 +31,7 @@ def jdraw_k_batch(keys_set, L, k):
     return jnp.stack([jdraw_k(keys, L, k) for keys in keys_set], axis=0)
 
 
-def subset_sampling(seed: int, activations, K: int, N: int, 
+'''def subset_sampling(seed: int, activations, K: int, N: int, 
                     quantile: float | int, device, 
                     activations_sort_id=None):
 
@@ -70,8 +72,39 @@ def subset_sampling(seed: int, activations, K: int, N: int,
     del bottom_set_id
 
     torch.cuda.empty_cache()
-    return top_id , bottom_id
+    return top_id , bottom_id'''
 
+def subset_sampling(seed: int, activations, K: int, N: int, 
+                    quantile: float | int, device, 
+                    activations_sort_id=None):
+    
+    n_units = activations.shape[0]
+    n_samples = activations.shape[1]
+    subset_length = math.ceil(n_samples * quantile)
+    assert not subset_length < K+1
+
+    top_id = torch.stack([torch_draw_k(torch.empty(N), subset_length, K+1) for _ in range(n_units)] )
+    bottom_id = torch.stack([torch_draw_k(torch.empty(N), subset_length, K+1) for _ in range(n_units)] )
+
+    if quantile==1:
+        del activations
+        return top_id , bottom_id
+
+    if activations_sort_id is None:
+        activations_sort_id = torch.argsort(activations, dim=-1, descending=False)
+        del activations
+
+    top_set_id = torch.flip(activations_sort_id, [-1])[:, :subset_length]
+    bottom_set_id = activations_sort_id[:, :subset_length]
+    del activations_sort_id
+    
+    top_id = get_act_subset(top_set_id , top_id)
+    del top_set_id
+    bottom_id = get_act_subset(bottom_set_id , bottom_id)
+    del bottom_set_id
+
+    torch.cuda.empty_cache()
+    return top_id , bottom_id
 
 def sort_subset_id(top_id, bottom_id, activations):
     top_act = get_act_subset(activations, top_id)
