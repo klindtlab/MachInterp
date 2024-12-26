@@ -9,6 +9,7 @@ from jax import random as jrandom
 from jax import numpy as jnp
 from jax import vmap as jvmap
 import numpy as np
+import gc
 
 
 def get(set, x):
@@ -40,27 +41,35 @@ def subset_sampling(seed: int, activations, K: int, N: int,
     key = jrandom.PRNGKey(seed)
     keys_set = jrandom.split(key, num=(2, n_units, N))
 
-    top_id  = torch.from_numpy(np.array(jdraw_k_batch(keys_set[0], L=subset_length, k=K+1))).to(device)
-    bottom_id = torch.from_numpy(np.array(jdraw_k_batch(keys_set[1], L=subset_length, k=K+1))).to(device)
+    top_id_jax = jdraw_k_batch(keys_set[0], L=subset_length, k=K+1)
+    bottom_id_jax = jdraw_k_batch(keys_set[1], L=subset_length, k=K+1)
 
     del key
     del keys_set
 
+    top_id  = torch.from_numpy(np.array(top_id_jax)).to(device)
+    del top_id_jax
+    bottom_id = torch.from_numpy(np.array(bottom_id_jax)).to(device)
+    del bottom_id_jax
+
     if quantile==1:
+        del activations
         return top_id , bottom_id
 
     if activations_sort_id is None:
         activations_sort_id = torch.argsort(activations, dim=-1, descending=False)
+        del activations
 
     top_set_id = torch.flip(activations_sort_id, [-1])[:, :subset_length]
     bottom_set_id = activations_sort_id[:, :subset_length]
+    del activations_sort_id
     
     top_id = get_act_subset(top_set_id , top_id)
-    bottom_id = get_act_subset(bottom_set_id , bottom_id)
-
     del top_set_id
+    bottom_id = get_act_subset(bottom_set_id , bottom_id)
     del bottom_set_id
 
+    torch.cuda.empty_cache()
     return top_id , bottom_id
 
 
@@ -74,13 +83,19 @@ def sort_subset_id(top_id, bottom_id, activations):
     top_sort_id = torch.argsort(top_act, dim=-1, descending=True)
     bottom_sort_id = torch.argsort(bottom_act, dim=-1, descending=False)
 
-    top_id = get_vv(top_id, top_sort_id)
-    bottom_id = get_vv(bottom_id, bottom_sort_id)
+    del top_act
+    del bottom_act
+
+    top_id_sorted = get_vv(top_id, top_sort_id)
+    del top_id
+    bottom_id_sorted = get_vv(bottom_id, bottom_sort_id)
+    del bottom_id
 
     del top_sort_id
     del bottom_sort_id
 
-    return top_id, bottom_id
+    torch.cuda.empty_cache()
+    return top_id_sorted, bottom_id_sorted
 
 
 def query_explanation_generation(seed: int, I_set, activations, 
@@ -127,17 +142,22 @@ def query_explanation_generation(seed: int, I_set, activations,
     print(bottom_id.shape)
 
     Explanation_plus_set = get_I_subset2(I_set, top_id[:,:,:K])
-    Explanation_minus_set = get_I_subset2(I_set, bottom_id[:,:,:K])
-
     query_plus_set = get_I_subset1(I_set, top_id[:,:,K])
-    query_minus_set = get_I_subset1(I_set, bottom_id[:,:,K])
-
-    query_set = (query_plus_set, query_minus_set)
-    Explanation_set = (Explanation_plus_set, Explanation_minus_set)
-
     del top_id
+
+    Explanation_minus_set = get_I_subset2(I_set, bottom_id[:,:,:K])
+    query_minus_set = get_I_subset1(I_set, bottom_id[:,:,K])
     del bottom_id
 
+    query_set = (query_plus_set, query_minus_set)
+    del query_plus_set
+    del query_minus_set
+
+    Explanation_set = (Explanation_plus_set, Explanation_minus_set)
+    del Explanation_plus_set
+    del Explanation_minus_set
+
+    torch.cuda.empty_cache()
     return query_set , Explanation_set
 
 
