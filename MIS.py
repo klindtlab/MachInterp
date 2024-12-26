@@ -183,8 +183,8 @@ def query_explanation_generation(seed: int, I_set, activations,
     
     top_id , bottom_id = sort_subset_id(top_id, bottom_id, activations)
 
-    print(top_id.shape)
-    print(bottom_id.shape)
+    # print(top_id.shape)
+    # print(bottom_id.shape)
 
     Explanation_plus_set = get_I_subset2(I_set, top_id[:,:,:K])
     query_plus_set = get_I_subset1(I_set, top_id[:,:,K])
