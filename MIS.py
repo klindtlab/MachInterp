@@ -23,8 +23,8 @@ get_vv = torch.vmap(get_v) # for set: (n_units, N, L) and x: (n_units, N, K+1), 
 torch_draw_k = torch.vmap(lambda x, L, k: torch.randperm(L)[:k], 
                           in_dims=(0, None, None), randomness='different' )
 
-jdraw_k = jvmap(lambda key, L, k: jrandom.choice(key, L, shape=(k,), replace=False),
-                  in_axes=(0, None, None) )
+jdaw_k = jvmap(lambda key, L, k: jrandom.choice(key, L, shape=(k,), replace=False),
+               in_axes=(0, None, None) )
 # jdraw_k_batch_v = jvmap(jdraw_k, in_axes=(0, None, None))
 
 def jdraw_k_batch(keys_set, L, k):
@@ -83,11 +83,20 @@ def subset_sampling(seed: int, activations, K: int, N: int,
     subset_length = math.ceil(n_samples * quantile)
     assert not subset_length < K+1
 
+    g0, gtop, gbottom = torch.Generator(device=device), torch.Generator(device=device), torch.Generator(device=device) 
+    g0.manual_seed(seed)
+
+    top_seed , bottom_seed = torch.randint(0, 117649, size=(2,), generator=g0)
+    gtop.manual_seed(top_seed)
+    gbottom.manual_seed(bottom_seed)
+
+    # sampling without replacement
     #top_id = torch.stack([torch_draw_k(torch.empty(N), subset_length, K+1) for _ in range(n_units)], dim=0)
     #bottom_id = torch.stack([torch_draw_k(torch.empty(N), subset_length, K+1) for _ in range(n_units)], dim=0 )
 
-    top_id = torch.randint(0, subset_length, size=(n_units, N, K+1))
-    bottom_id = torch.randint(0, subset_length, size=(n_units, N, K+1))
+    # sampling with replacement
+    top_id = torch.randint(0, subset_length, size=(n_units, N, K+1), generator=gtop)
+    bottom_id = torch.randint(0, subset_length, size=(n_units, N, K+1), generator=gbottom)
 
     if quantile==1:
         del activations
