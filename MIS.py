@@ -87,8 +87,8 @@ def subset_sampling(seed: int, activations, K: int, N: int,
     g0.manual_seed(seed)
 
     top_seed , bottom_seed = torch.randint(0, 117649, size=(2,), generator=g0)
-    gtop.manual_seed(top_seed)
-    gbottom.manual_seed(bottom_seed)
+    gtop.manual_seed(top_seed.item())
+    gbottom.manual_seed(bottom_seed.item())
 
     # sampling without replacement
     #top_id = torch.stack([torch_draw_k(torch.empty(N), subset_length, K+1) for _ in range(n_units)], dim=0)
