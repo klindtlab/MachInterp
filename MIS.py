@@ -4,33 +4,32 @@ from PIL import Image
 from metric import get_metric
 import math
 from metric import process
-import jax
-from jax import random as jrandom
-from jax import numpy as jnp
-from jax import vmap as jvmap
-import numpy as np
+# import jax
+# from jax import random as jrandom
+# from jax import numpy as jnp
+# from jax import vmap as jvmap
+# import numpy as np
 import gc
 
 
 def get(set, x):
     return set[x]
-get_I_subset1 = torch.vmap( get, in_dims=(None, 0) ) # for set: (n_samples , *I_dim) and x: (n_units, N), return: (n_units, N, *I_dim)
-get_I_subset2 = torch.vmap(get_I_subset1, in_dims=(None, 0)) # for set: (n_samples , *I_dim) and x: (n_units, N, K+1), return: (n_units, N, K+1, *I_dim)
+get_I_subset1 = torch.vmap( get, in_dims=(None, 0), chunk_size=4 ) # for set: (n_samples , *I_dim) and x: (n_units, N), return: (n_units, N, *I_dim)
+get_I_subset2 = torch.vmap(get_I_subset1, in_dims=(None, 0), chunk_size=4 ) # for set: (n_samples , *I_dim) and x: (n_units, N, K+1), return: (n_units, N, K+1, *I_dim)
 get_act_subset = torch.vmap( torch.vmap(get, in_dims=(None, 0)) ) # for set: (n_units, n_samples) and x: (n_units, N, K+1), return: (n_units, N, K+1, n_samples)
 get_v = torch.vmap(get) 
 get_vv = torch.vmap(get_v) # for set: (n_units, N, L) and x: (n_units, N, K+1), return: (n_units, N, K+1)
 
 torch_draw_k = torch.vmap(lambda x, L, k: torch.randperm(L)[:k], 
                           in_dims=(0, None, None), randomness='different', chunk_size=4)
-
 torch_draw_k_batch = torch.vmap(torch_draw_k, in_dims=(0, None, None), randomness='different', chunk_size=4)
 
-jdraw_k = jvmap(lambda key, L, k: jrandom.choice(key, L, shape=(k,), replace=False),
+'''jdraw_k = jvmap(lambda key, L, k: jrandom.choice(key, L, shape=(k,), replace=False),
                in_axes=(0, None, None) )
 jdraw_k_batch_v = jvmap(jdraw_k, in_axes=(0, None, None))
 
 def jdraw_k_batch(keys_set, L, k):
-    return jnp.stack([jdraw_k(keys, L, k) for keys in keys_set], axis=0)
+    return jnp.stack([jdraw_k(keys, L, k) for keys in keys_set], axis=0)'''
 
 
 '''def subset_sampling(seed: int, activations, K: int, N: int, 
@@ -79,7 +78,24 @@ def jdraw_k_batch(keys_set, L, k):
 def subset_sampling(seed: int, activations, K: int, N: int, 
                     quantile: float | int, device, 
                     activations_sort_id=None):
-    
+    """
+    Randomly generates indices of query and explanation images from appropriate quantile range
+    for ensemble of tasks. 
+
+    Input:
+    - 'seed': seed for random generation
+    - 'activations': (n_units x ds_length) activations in different units across all sample images
+    - 'K': Number of images in each explanation
+    - 'N': Number of tasks
+    - 'quantile': The quantile range to draw from
+    - 'device': the device to perform random generation on. (Not implemented)
+    - 'activations_sort_id': Optional. Argsort of the activations for all units
+
+    Output:
+    - 'top_id': (n_units x N x (K+1)) indices of the 
+    """
+
+
     n_units = activations.shape[0]
     n_samples = activations.shape[1]
     subset_length = math.ceil(n_samples * quantile)
@@ -304,12 +320,12 @@ def calc_MIS_set(query_set, Explanation_set, sim_metric: callable, alpha=0.16):
 
 
 class task_config:
-    def __init__(self, image_set: list[Image], activations: Tensor,
-                 device: str, processed: dict={}):
+    def __init__(self, device: str, image_set: list[Image], activations: Tensor,
+                 processed: dict={}):
         '''
         Input
-            X: List of PIL Images (NxHXWXC)
-            Y: Tensor (NxK)
+            image_set: List of PIL Images (NxHXWXC)
+            activations: torch Tensor (NxK)
         '''
 
         self.x_data = image_set

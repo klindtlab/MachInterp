@@ -106,7 +106,7 @@ def get_metric_preprocess(metric_type: str, device=torch.device("cuda" if torch.
 
 class Metric_Preprocess:
     """
-    A simple mutable singleton class.
+    A simple singleton class. That stores all loaded metric and preprocess functions.
     """
     _instance = None
     _metric = {}
