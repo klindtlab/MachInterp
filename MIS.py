@@ -200,19 +200,19 @@ def query_explanation_generation(seed: int, I_set, activations,
     print(top_id[-1,-1])
     print(bottom_id[-1,-1])
 
-    Explanation_plus_set = get_I_subset2(I_set, top_id[:,:,:K])
-    query_plus_set = get_I_subset1(I_set, top_id[:,:,K])
+    Explanation_plus_set = get_I_subset2(I_set.to('cpu'), top_id[:,:,:K].to('cpu'))
+    query_plus_set = get_I_subset1(I_set.to('cpu'), top_id[:,:,K].to('cpu'))
     del top_id
 
-    Explanation_minus_set = get_I_subset2(I_set, bottom_id[:,:,:K])
-    query_minus_set = get_I_subset1(I_set, bottom_id[:,:,K])
+    Explanation_minus_set = get_I_subset2(I_set.to('cpu'), bottom_id[:,:,:K].to('cpu'))
+    query_minus_set = get_I_subset1(I_set.to('cpu'), bottom_id[:,:,K].to('cpu'))
     del bottom_id
 
-    query_set = (query_plus_set, query_minus_set)
+    query_set = (query_plus_set.to(device), query_minus_set.to(device))
     del query_plus_set
     del query_minus_set
 
-    Explanation_set = (Explanation_plus_set, Explanation_minus_set)
+    Explanation_set = (Explanation_plus_set.to(device), Explanation_minus_set.to(device))
     del Explanation_plus_set
     del Explanation_minus_set
 
