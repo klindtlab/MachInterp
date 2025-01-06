@@ -14,15 +14,15 @@ import gc
 
 def get(set, x):
     return set[x]
-get_I_subset1 = torch.vmap( get, in_dims=(None, 0), chunk_size=1 ) # for set: (n_samples , *I_dim) and x: (n_units, N), return: (n_units, N, *I_dim)
-get_I_subset2 = torch.vmap(get_I_subset1, in_dims=(None, 0), chunk_size=1 ) # for set: (n_samples , *I_dim) and x: (n_units, N, K+1), return: (n_units, N, K+1, *I_dim)
+get_I_subset1 = torch.vmap( get, in_dims=(None, 0)) # for set: (n_samples , *I_dim) and x: (n_units, N), return: (n_units, N, *I_dim)
+get_I_subset2 = torch.vmap(get_I_subset1, in_dims=(None, 0)) # for set: (n_samples , *I_dim) and x: (n_units, N, K+1), return: (n_units, N, K+1, *I_dim)
 get_act_subset = torch.vmap( torch.vmap(get, in_dims=(None, 0)) ) # for set: (n_units, n_samples) and x: (n_units, N, K+1), return: (n_units, N, K+1, n_samples)
-get_v = torch.vmap(get) 
+get_v = torch.vmap(get)
 get_vv = torch.vmap(get_v) # for set: (n_units, N, L) and x: (n_units, N, K+1), return: (n_units, N, K+1)
 
 torch_draw_k = torch.vmap(lambda x, L, k: torch.randperm(L)[:k], 
-                          in_dims=(0, None, None), randomness='different', chunk_size=2)
-torch_draw_k_batch = torch.vmap(torch_draw_k, in_dims=(0, None, None), randomness='different', chunk_size=2)
+                          in_dims=(0, None, None), randomness='different', chunk_size=4)
+torch_draw_k_batch = torch.vmap(torch_draw_k, in_dims=(0, None, None), randomness='different', chunk_size=4)
 
 '''jdraw_k = jvmap(lambda key, L, k: jrandom.choice(key, L, shape=(k,), replace=False),
                in_axes=(0, None, None) )
@@ -200,12 +200,12 @@ def query_explanation_generation(seed: int, I_set, activations,
     print(top_id[-1,-1])
     print(bottom_id[-1,-1])
 
-    Explanation_plus_set = get_I_subset2(I_set.to('cpu'), top_id[:,:,:K].to('cpu'))
-    query_plus_set = get_I_subset1(I_set.to('cpu'), top_id[:,:,K].to('cpu'))
+    Explanation_plus_set = get_I_subset2(I_set, top_id[:,:,:K])
+    query_plus_set = get_I_subset1(I_set, top_id[:,:,K])
     del top_id
 
-    Explanation_minus_set = get_I_subset2(I_set.to('cpu'), bottom_id[:,:,:K].to('cpu'))
-    query_minus_set = get_I_subset1(I_set.to('cpu'), bottom_id[:,:,K].to('cpu'))
+    Explanation_minus_set = get_I_subset2(I_set, bottom_id[:,:,:K])
+    query_minus_set = get_I_subset1(I_set, bottom_id[:,:,K])
     del bottom_id
 
     query_set = (query_plus_set.to(device), query_minus_set.to(device))
