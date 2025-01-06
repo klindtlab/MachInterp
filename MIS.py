@@ -21,8 +21,8 @@ get_v = torch.vmap(get)
 get_vv = torch.vmap(get_v) # for set: (n_units, N, L) and x: (n_units, N, K+1), return: (n_units, N, K+1)
 
 torch_draw_k = torch.vmap(lambda x, L, k: torch.randperm(L)[:k], 
-                          in_dims=(0, None, None), randomness='different', chunk_size=4)
-torch_draw_k_batch = torch.vmap(torch_draw_k, in_dims=(0, None, None), randomness='different', chunk_size=4)
+                          in_dims=(0, None, None), randomness='different', chunk_size=1)
+torch_draw_k_batch = torch.vmap(torch_draw_k, in_dims=(0, None, None), randomness='different', chunk_size=1)
 
 '''jdraw_k = jvmap(lambda key, L, k: jrandom.choice(key, L, shape=(k,), replace=False),
                in_axes=(0, None, None) )
