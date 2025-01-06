@@ -14,8 +14,8 @@ import gc
 
 def get(set, x):
     return set[x]
-get_I_subset1 = torch.vmap( get, in_dims=(None, 0), chunk_size=2 ) # for set: (n_samples , *I_dim) and x: (n_units, N), return: (n_units, N, *I_dim)
-get_I_subset2 = torch.vmap(get_I_subset1, in_dims=(None, 0), chunk_size=2 ) # for set: (n_samples , *I_dim) and x: (n_units, N, K+1), return: (n_units, N, K+1, *I_dim)
+get_I_subset1 = torch.vmap( get, in_dims=(None, 0), chunk_size=1 ) # for set: (n_samples , *I_dim) and x: (n_units, N), return: (n_units, N, *I_dim)
+get_I_subset2 = torch.vmap(get_I_subset1, in_dims=(None, 0), chunk_size=1 ) # for set: (n_samples , *I_dim) and x: (n_units, N, K+1), return: (n_units, N, K+1, *I_dim)
 get_act_subset = torch.vmap( torch.vmap(get, in_dims=(None, 0)) ) # for set: (n_units, n_samples) and x: (n_units, N, K+1), return: (n_units, N, K+1, n_samples)
 get_v = torch.vmap(get) 
 get_vv = torch.vmap(get_v) # for set: (n_units, N, L) and x: (n_units, N, K+1), return: (n_units, N, K+1)
@@ -196,8 +196,8 @@ def query_explanation_generation(seed: int, I_set, activations,
     
     top_id , bottom_id = sort_subset_id(top_id, bottom_id, activations)
 
-    # print(top_id.shape)
-    # print(bottom_id.shape)
+    print(top_id[-1,-1])
+    print(bottom_id[-1,-1])
 
     Explanation_plus_set = get_I_subset2(I_set, top_id[:,:,:K])
     query_plus_set = get_I_subset1(I_set, top_id[:,:,K])
