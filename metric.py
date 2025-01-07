@@ -5,6 +5,17 @@ from torchvision.transforms import ToTensor
 
 
 def get_lpips(device):
+    """
+    Get LPIPS similarity metric and preprocessing functions.
+
+    Args:
+        device: Device to load model on ('cpu' or 'cuda')
+
+    Returns:
+        tuple: (sim_metric, preprocess_ds)
+            - sim_metric: Function that computes LPIPS similarity between two image tensors
+            - preprocess_ds: Function that preprocesses a dataset of images for LPIPS
+    """
     from lpips import LPIPS
     loss_fn = LPIPS(net='alex').to(device)
     to_tensor_inst = ToTensor()
@@ -53,6 +64,17 @@ def get_lpips(device):
 
 
 def get_dreamsim(device):
+    """
+    Get DreamSim similarity metric and preprocessing functions.
+
+    Args:
+        device: Device to load model on ('cpu' or 'cuda')
+
+    Returns:
+        tuple: (sim_metric, preprocess_embed_ds)
+            - sim_metric: Function that computes cosine similarity between DreamSim embeddings
+            - preprocess_embed_ds: Function that preprocesses and embeds a dataset of images
+    """
     from dreamsim import dreamsim
 
     model, preprocess = dreamsim(pretrained=True, device=device)
@@ -95,6 +117,21 @@ def get_dreamsim(device):
 
 
 def get_metric_preprocess(metric_type: str, device=torch.device("cuda" if torch.cuda.is_available() else 'cpu')):
+    """
+    Get similarity metric and preprocessing functions for specified metric type.
+
+    Args:
+        metric_type: Type of metric to get ('dreamsim' or 'lpips')
+        device: Device to load model on ('cpu' or 'cuda')
+
+    Returns:
+        tuple: (metric_fn, preprocess_fn)
+            - metric_fn: Function that computes similarity between images/embeddings
+            - preprocess_fn: Function that preprocesses images for the metric
+
+    Raises:
+        AssertionError: If metric_type is not 'dreamsim' or 'lpips'
+    """
     metric_type = metric_type.lower()
     assert metric_type in ["dreamsim", "lpips"]
 
@@ -106,7 +143,21 @@ def get_metric_preprocess(metric_type: str, device=torch.device("cuda" if torch.
 
 class Metric_Preprocess:
     """
-    A simple singleton class. That stores all loaded metric and preprocess functions.
+    A singleton class that stores and manages metric and preprocessing functions.
+
+    This class caches metric functions and their corresponding preprocessing functions
+    to avoid reloading them multiple times. It uses a tuple of (metric_type, device) 
+    as keys to store and retrieve the functions.
+
+    Attributes:
+        _instance: Class variable storing the singleton instance
+        _metric: Dictionary storing metric functions keyed by (metric_type, device)
+        _preprocess: Dictionary storing preprocessing functions keyed by (metric_type, device)
+
+    Methods:
+        __call__(metric_type, device): Get both metric and preprocess functions
+        process(dataset, metric_type, device): Preprocess a dataset using cached function
+        get_metric(metric_type, device): Get just the metric function
     """
     _instance = None
     _metric = {}
@@ -118,22 +169,48 @@ class Metric_Preprocess:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-
     def __init__(self, metric_type: str=None, device: str=None):
+        """
+        Initialize or update the singleton instance.
+
+        Args:
+            metric_type: Type of metric to load ('dreamsim' or 'lpips')
+            device: Device to load the metric on ('cpu' or 'cuda')
+        """
         # Update the value every time the instance is called
         if metric_type is not None and device is not None:
             key = (metric_type, device)
             if not key in self._metric.keys():
                 self._metric[key] , self._preprocess[key] = get_metric_preprocess(metric_type , device)
 
-
     def __call__(self, metric_type: str, device: str):
+        """
+        Get metric and preprocessing functions for given type and device.
+
+        Args:
+            metric_type: Type of metric ('dreamsim' or 'lpips')
+            device: Device to use ('cpu' or 'cuda')
+
+        Returns:
+            Tuple of (metric_function, preprocess_function)
+        """
         key = (metric_type, device)
         if not key in self._metric.keys():
             self._metric[key] , self._preprocess[key] = get_metric_preprocess(metric_type , device)
         return self._metric[key] , self._preprocess[key]
     
     def process(self, dataset, metric_type: str, device: str):
+        """
+        Preprocess a dataset using cached preprocessing function.
+
+        Args:
+            dataset: Dataset to preprocess
+            metric_type: Type of metric preprocessing to use
+            device: Device to preprocess on
+
+        Returns:
+            Preprocessed dataset
+        """
         key = (metric_type, device)
         if not key in self._metric.keys():
             self._metric[key] , self._preprocess[key] = get_metric_preprocess(metric_type , device)
@@ -141,6 +218,16 @@ class Metric_Preprocess:
         return self._preprocess[key](dataset)
     
     def get_metric(self, metric_type: str, device: str):
+        """
+        Get metric function for given type and device.
+
+        Args:
+            metric_type: Type of metric to get
+            device: Device to get metric for
+
+        Returns:
+            Metric function
+        """
         key = (metric_type, device)
         if not key in self._metric.keys():
             self._metric[key] , self._preprocess[key] = get_metric_preprocess(metric_type , device)
@@ -148,10 +235,31 @@ class Metric_Preprocess:
     
 
 def process(dataset, metric_type: str, device):
+    """
+    Preprocess a dataset using the specified metric type and device.
+
+    Args:
+        dataset: Dataset to preprocess
+        metric_type: Type of metric preprocessing to use ('dreamsim' or 'lpips')
+        device: Device to preprocess on ('cpu' or 'cuda')
+
+    Returns:
+        Preprocessed dataset
+    """
     wrapper = Metric_Preprocess()
     return wrapper.process(dataset, metric_type, device)
 
 
 def get_metric(metric_type: str, device):
+    """
+    Get metric function for the specified type and device.
+
+    Args:
+        metric_type: Type of metric to get ('dreamsim' or 'lpips')
+        device: Device to get metric for ('cpu' or 'cuda')
+
+    Returns:
+        Metric function for computing similarity between images
+    """
     wrapper = Metric_Preprocess()
     return wrapper.get_metric(metric_type, device)

@@ -32,49 +32,6 @@ def jdraw_k_batch(keys_set, L, k):
     return jnp.stack([jdraw_k(keys, L, k) for keys in keys_set], axis=0)'''
 
 
-'''def subset_sampling(seed: int, activations, K: int, N: int, 
-                    quantile: float | int, device, 
-                    activations_sort_id=None):
-
-    n_units = activations.shape[0]
-    n_samples = activations.shape[1]
-    subset_length = math.ceil(n_samples * quantile)
-    assert not subset_length < K+1
-
-    key = jrandom.PRNGKey(seed)
-    keys_set = jrandom.split(key, num=(2, n_units, N))
-
-    top_id_jax = jdraw_k_batch(keys_set[0], L=subset_length, k=K+1)
-    bottom_id_jax = jdraw_k_batch(keys_set[1], L=subset_length, k=K+1)
-
-    del key
-    del keys_set
-
-    top_id  = torch.from_numpy(np.array(top_id_jax)).to(device)
-    del top_id_jax
-    bottom_id = torch.from_numpy(np.array(bottom_id_jax)).to(device)
-    del bottom_id_jax
-
-    if quantile==1:
-        del activations
-        return top_id , bottom_id
-
-    if activations_sort_id is None:
-        activations_sort_id = torch.argsort(activations, dim=-1, descending=False)
-        del activations
-
-    top_set_id = torch.flip(activations_sort_id, [-1])[:, :subset_length]
-    bottom_set_id = activations_sort_id[:, :subset_length]
-    del activations_sort_id
-    
-    top_id = get_act_subset(top_set_id , top_id)
-    del top_set_id
-    bottom_id = get_act_subset(bottom_set_id , bottom_id)
-    del bottom_set_id
-
-    torch.cuda.empty_cache()
-    return top_id , bottom_id'''
-
 def subset_sampling(seed: int, activations, K: int, N: int, 
                     quantile: float | int, device, 
                     activations_sort_id=None):
@@ -132,6 +89,19 @@ def subset_sampling(seed: int, activations, K: int, N: int,
     return top_id , bottom_id
 
 def sort_subset_id(top_id, bottom_id, activations):
+    """
+    Sort subsets of indices based on their activation values.
+
+    Args:
+        top_id: Tensor of indices for top activations (n_units x N x K+1)
+        bottom_id: Tensor of indices for bottom activations (n_units x N x K+1) 
+        activations: Tensor of activation values (n_units x ds_length)
+
+    Returns:
+        tuple: (top_id_sorted, bottom_id_sorted)
+            - top_id_sorted: Indices sorted by decreasing activation values
+            - bottom_id_sorted: Indices sorted by increasing activation values
+    """
     top_act = get_act_subset(activations, top_id)
     bottom_act = get_act_subset(activations, bottom_id)
     assert top_id.shape == bottom_id.shape
@@ -196,10 +166,6 @@ def query_explanation_generation(seed: int, I_set, activations,
     
     top_id , bottom_id = sort_subset_id(top_id, bottom_id, activations)
 
-    # print(I_set.shape)
-    # print(top_id[-1,-1])
-    # print(bottom_id[-1,-1])
-
     Explanation_plus_set = get_I_subset2(I_set, top_id[:,:,:K])
     query_plus_set = get_I_subset1(I_set, top_id[:,:,K])
     del top_id
@@ -221,6 +187,9 @@ def query_explanation_generation(seed: int, I_set, activations,
 
 
 def aggregate(im_sim):
+    """
+    Aggregate similarity scores across all tasks.
+    """
     a = torch.mean(im_sim, dim=-1)
     if a.shape[0]==1 and len(a.shape)==1:
         return a[0]
@@ -229,6 +198,17 @@ aggregate_batch = torch.vmap(aggregate)
 
 
 def s(q_batch, E_batch, sim_metric_v):
+    """
+    Calculate similarity between query and explanation images.
+
+    Input:
+    - 'q_batch': Torch tensor of shape (N, *I_dim) containing preprocessed query images
+    - 'E_batch': Torch tensor of shape (N, K, *I_dim) containing preprocessed explanation images
+    - 'sim_metric_v': Callable similarity metric function that is vectorized with torch vmap
+
+    Output:
+    - 'a_batch': Torch tensor of shape (N,) containing similarity scores
+    """
     sim_batch = sim_metric_v(q_batch, E_batch) # similarity should be inverse relationship to distance metric
     a_batch = aggregate_batch(sim_batch)
 
@@ -321,12 +301,27 @@ def calc_MIS_set(query_set, Explanation_set, sim_metric: callable, alpha=0.16):
 
 
 class task_config:
+    """
+    A class to store and manage task data including images, activations, and preprocessed versions.
+    
+    Attributes:
+        x_data: List of PIL Images (NxHxWxC) representing the input images
+        y_data: Torch tensor (KxN) containing activations, transposed from (NxK)
+        y_sort_id: Sorted indices of y_data in ascending order
+        device: String specifying the compute device ('cpu' or 'cuda')
+        processed: Dictionary storing preprocessed versions of x_data for different metrics
+    """
+
     def __init__(self, device: str, image_set: list[Image], activations: Tensor,
                  processed: dict={}):
         '''
-        Input
-            image_set: List of PIL Images (NxHXWXC)
-            activations: torch Tensor (NxK)
+        Initialize task_config with images and their corresponding activations.
+
+        Args:
+            device: String specifying compute device ('cpu' or 'cuda')
+            image_set: List of PIL Images (NxHxWxC)
+            activations: Torch tensor (NxK) containing activation values
+            processed: Optional dict of preprocessed versions of image_set
         '''
 
         self.x_data = image_set
@@ -336,9 +331,20 @@ class task_config:
         self.processed = processed
 
     def __getitem__(self, index):
+        """Get image and activation pair at given index."""
         return self.x_data[index] , self.y_data[:,index]
     
     def get_data(self, metric_type: str=None):
+        """
+        Get raw or preprocessed image data for specified metric type.
+        
+        Args:
+            metric_type: String specifying which preprocessed version to return.
+                        If None, returns raw images.
+        
+        Returns:
+            Raw or preprocessed image data
+        """
         if metric_type is None:
             return self.x_data
         if metric_type in self.processed.keys():
@@ -348,15 +354,38 @@ class task_config:
         return self.processed[metric_type]
     
     def get_target(self):
+        """Get activation values."""
         return self.y_data
     
     def replace_y(self, activations):
+        """
+        Replace current activation values with new ones.
+        
+        Args:
+            activations: New activation tensor (NxK)
+        """
         self.y_data = torch.transpose(activations , 0, 1)
         self.y_sort_id = torch.argsort(self.y_data, dim=1, descending=False)
 
 
 def run_psychophysics(seed: int, task_data: task_config, metric_type: str,
                       K: int, N: int, quantile: float, alpha: float=None, metric=None):
+    """
+    Run psychophysics experiment to generate Mechanistic Interpretability Score (MIS).
+    
+    Args:
+        seed: Random seed for reproducibility
+        task_data: Task configuration object containing image data and activations
+        metric_type: Type of similarity metric to use ('dreamsim' or 'lpips')
+        K: Number of images in each (+ , -) explanation set per task
+        N: Number of psychophysics experiment trials
+        quantile: Quantile threshold for selecting images
+        alpha: Optional threshold parameter for MIS calculation
+        metric: Optional pre-initialized metric function. If None, will be initialized based on metric_type
+    
+    Returns:
+        MIS_set: Set of Mechanistic Interpretability Score calculated through psychophysics experiment
+    """
     
     device = task_data.device
 
