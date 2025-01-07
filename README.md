@@ -37,3 +37,43 @@ To get started, clone the repository and install the necessary dependencies:
 git clone https://github.com/brendel-group/mis.git
 cd mis
 pip install -r requirements.txt
+```
+
+## Usage
+First copy `MIS.py` and `metric.py` into your working directory:
+```bash
+cp <local-path-to-repo>/MIS.py ./
+cp <local-path-to-repo>/metric.py ./
+```
+Then import `MIS.py`:
+```
+import MIS
+```
+To run psychophysics experiment and calculate the Mechanistic Interpretability Score of neuron units, we load in images and the associate neuron units activations into a custom object class `task_config`, then specify the follow psychophysics-specific parametres:
+- `seed`: ensures reproducibility
+- `device`: either `'cpu'` or `'cuda'`
+- `metric_type`: the type of image metric function to use. Currently supports `'dreamsim'` and `'lpips'`
+- `K`: the number of explanation images in an explanation set in a single psychophysics task
+- `N`: the number of psychophysics tasks for a neuron unit
+- `quantile`: Quantile threshold for selecting images
+- `alpha`: Optional threshold parameter for MIS calculation
+```
+from MIS import task_config, run_psychophysics
+
+# Assume we have the following raw data:
+# image_list: a python list of PIL Image objects (length: N_images)
+# activations: a torch tensor containing neuron unit activations in response to the images in image_list, shape: N_images x N_units
+
+device = 'cuda'
+task_data = task_config(device=device, image_set=image_list, activations=activations)
+
+seed = 117
+metric_type = "dreamsim"
+K = 9
+N = 100
+quantile = 0.25
+alpha = None
+
+# Now we run psychophysics experiment
+MIS = run_psychophysics(seed, task_data, metric_type=metric_type, K=K, N=N, quantile=quantile, alpha=alpha)
+```
