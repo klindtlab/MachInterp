@@ -93,9 +93,9 @@ def sort_subset_id(top_id, bottom_id, activations):
     Sort subsets of indices based on their activation values.
 
     Args:
-        top_id: Tensor of indices for top activations (n_units x N x K+1)
-        bottom_id: Tensor of indices for bottom activations (n_units x N x K+1) 
-        activations: Tensor of activation values (n_units x ds_length)
+        top_id: Tensor of indices for top activations (N_units x N x K+1)
+        bottom_id: Tensor of indices for bottom activations (N_units x N x K+1) 
+        activations: Tensor of activation values (N_units x N_images)
 
     Returns:
         tuple: (top_id_sorted, bottom_id_sorted)
@@ -139,11 +139,11 @@ def query_explanation_generation(seed: int, I_set, activations,
                dimension is length of the dataset, while subsequent dimensions depend on
                the model-specific input processing. For example, with Dreamsim
                preprocessing which converts a (WxHx3) image to a (1x1792) embedding, the
-               dimensions of corresponding 'I_set' will be (ds_length x 1792).
+               dimensions of corresponding 'I_set' will be (N_images x 1792).
                For LPIPS preprocess which recasts a (WxHx3) image to a (3xWxH) tensor,
-               the tensor dimensions of corresponding 'I_set' will be (ds_length x W x H x 3).
+               the tensor dimensions of corresponding 'I_set' will be (N_images x 3 x W x H).
 
-    - 'activations': A two dimensional tensor (n_units x ds_length ) that
+    - 'activations': A two dimensional tensor (N_units x N_images ) that
                      contains activations of every image along every unit.
 
     - 'K': The number of images in each (+ , -) explanation set per task.
@@ -155,10 +155,10 @@ def query_explanation_generation(seed: int, I_set, activations,
 
     Output:
     - 'query_set': A tuple ('query_plus_set', 'query_minus_set') containing batched queries for all psychophysics tasks.
-        - 'query_plus_set' , 'query_minus_set': torch tensor of shape (n_units, N, *I_dim)
+        - 'query_plus_set' , 'query_minus_set': torch tensor of shape (N_units, N, *I_dim)
 
     - 'Explanation_set': A tuple ('Explanation_plus_set', 'Explanation_minus_set') containing batched explanations for all psychophysics tasks.
-        - 'Explanation_plus_set', 'Explanation_minus_set': torch tensor of shape (n_units, N, K, *I_dim)
+        - 'Explanation_plus_set', 'Explanation_minus_set': torch tensor of shape (N_units, N, K, *I_dim)
     """
     top_id , bottom_id = subset_sampling(seed, activations, K=K, 
                                          N=N, quantile=quantile, device=device,
@@ -266,18 +266,18 @@ def calc_MIS_set(query_set, Explanation_set, sim_metric: callable, alpha=0.16):
 
     Input:
     - 'query_set': A tuple ('q_plus_set', 'q_minus_set') containing query processed images of every psychophysics task for ALL UNITS.
-        - 'q_plus_set', 'q_minus_set': Torch tensor of shape (n_units, N , *I_dim)
+        - 'q_plus_set', 'q_minus_set': Torch tensor of shape (N_units, N, *I_dim)
 
     - 'Explanation_set': A tuple ('Explanation_plus_set', 'Explanation_minus_set') containing explanation processed images
                          of every psychophysics task for ALL UNITS.
-        - 'Explanation_plus_set', 'Explanation_minus_set': Torch tensor of shape (n_units, N, K, *I_dim)
+        - 'Explanation_plus_set', 'Explanation_minus_set': Torch tensor of shape (N_units, N, K, *I_dim)
 
     - 'sim_metric': Callable similarity metric function to be passed into callable 'calc_MIS'
 
     - 'alpha': Parametre for Sigmoid function in MIS calculation, passed into callable 'calc_MIS'
 
     Output:
-    - 'MIS_set': Torch tensor of shape (n_units,). Contains MIS of ALL UNITS.
+    - 'MIS_set': Torch tensor of shape (N_units,). Contains MIS of ALL UNITS.
     """
 
     assert len(query_set)==2
@@ -305,8 +305,8 @@ class task_config:
     A class to store and manage task data including images, activations, and preprocessed versions.
     
     Attributes:
-        x_data: List of PIL Images (NxHxWxC) representing the input images
-        y_data: Torch tensor (KxN) containing activations, transposed from (NxK)
+        x_data: List of PIL Images (N_images x H x W x C) representing the input images
+        y_data: Torch tensor (N_units x N_images) containing activations, transposed from (N_images x N_units)
         y_sort_id: Sorted indices of y_data in ascending order
         device: String specifying the compute device ('cpu' or 'cuda')
         processed: Dictionary storing preprocessed versions of x_data for different metrics
@@ -319,8 +319,8 @@ class task_config:
 
         Args:
             device: String specifying compute device ('cpu' or 'cuda')
-            image_set: List of PIL Images (NxHxWxC)
-            activations: Torch tensor (NxK) containing activation values
+            image_set: List of PIL Images (N_images x H x W x C)
+            activations: Torch tensor (N_images x N_units) containing activation values
             processed: Optional dict of preprocessed versions of image_set
         '''
 
@@ -362,7 +362,7 @@ class task_config:
         Replace current activation values with new ones.
         
         Args:
-            activations: New activation tensor (NxK)
+            activations: New activation tensor (N_images x N_units)
         """
         self.y_data = torch.transpose(activations , 0, 1)
         self.y_sort_id = torch.argsort(self.y_data, dim=1, descending=False)
