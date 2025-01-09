@@ -354,7 +354,7 @@ class task_config:
     Attributes:
         x_data: List of PIL Images (N_images x H x W x C) representing the input images
         y_data: Torch tensor (N_units x N_images) containing activations, transposed from (N_images x N_units)
-        y_sort_id: Sorted indices of y_data in ascending order
+        y_sort_id: Sorted indices of activations for every unit in ascending order
         device: String specifying the compute device ('cpu' or 'cuda')
         processed: Dictionary storing preprocessed versions of x_data for different metrics
     """
