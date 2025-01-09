@@ -264,7 +264,7 @@ def s(q_batch, E_batch, sim_metric_v):
 
 def calc_MIS(query, Explanation, sim_metric_v: callable, alpha: float|None=None):
     """
-    Calculate Mechanistic Interpretability Score (MIS) for SINGLE UNIT
+    Calculate Machine Interpretability Score (MIS) for SINGLE UNIT
 
     Input:
     - 'query': A tuple ('q_plus', 'q_minus') containing queries of all psychophysics tasks for SINGLE UNIT.
@@ -418,7 +418,7 @@ class task_config:
 def run_psychophysics(seed: int, task_data: task_config, metric_type: str,
                       K: int, N: int, quantile: float, alpha: float=None, metric=None):
     """
-    Run psychophysics experiment to generate Mechanistic Interpretability Score (MIS).
+    Run psychophysics experiment to generate Machine Interpretability Score (MIS).
     
     Args:
         seed: Random seed for reproducibility
