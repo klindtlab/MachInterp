@@ -1,4 +1,4 @@
-# MIS: Mechanistic Interpretability through Superposition
+# MIS: Machine Interpretability Scoring
 
 This repository contains the official codebase and supplementary materials for the paper **[Mechanistic Interpretability through Superposition]** by [Your Name and Co-authors]. The work explores the mechanisms underlying superposition in neural networks, providing insights into sparse coding and representation disentanglement.
 
