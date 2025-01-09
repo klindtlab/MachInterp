@@ -42,12 +42,12 @@ pip install -r requirements.txt
 ## Usage
 First copy `MIS.py` and `metric.py` into your working directory:
 ```bash
-cp <local-path-to-repo>/MIS.py ./
+cp <local-path-to-repo>/mis.py ./
 cp <local-path-to-repo>/metric.py ./
 ```
-Then import `MIS.py`:
+Then import `mis.py`:
 ```
-import MIS
+import mis
 ```
 To run psychophysics experiment and calculate the Mechanistic Interpretability Score of neuron units, we load in images and the associate neuron units activations into a custom object class `task_config`, then specify the follow psychophysics-specific parametres:
 - `seed`: ensures reproducibility
@@ -58,7 +58,7 @@ To run psychophysics experiment and calculate the Mechanistic Interpretability S
 - `quantile`: Quantile threshold for selecting images
 - `alpha`: Optional threshold parameter for MIS calculation
 ```
-from MIS import task_config, run_psychophysics
+from mis import task_config, run_psychophysics
 
 # Assume we have the following raw data:
 # image_list: a python list of PIL Image objects (length: N_images)
