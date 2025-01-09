@@ -49,7 +49,7 @@ Then import `mis.py`:
 ```
 import mis
 ```
-To run psychophysics experiment and calculate the Mechanistic Interpretability Score of neuron units, we load in images and the associate neuron units activations into a custom object class `task_config`, then specify the follow psychophysics-specific parametres:
+To run psychophysics experiment and calculate the Machine Interpretability Score of neuron units, we load in images and the associate neuron units activations into a custom object class `task_config`, then specify the follow psychophysics-specific parametres:
 - `seed`: ensures reproducibility
 - `device`: either `'cpu'` or `'cuda'`
 - `metric_type`: the type of image metric function to use. Currently supports `'dreamsim'` and `'lpips'`
