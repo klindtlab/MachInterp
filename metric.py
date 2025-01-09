@@ -105,7 +105,7 @@ def get_dreamsim(device):
             loader_loop = enumerate(ds_loader)
 
         print("Preprocessing images for DREAMSIM...")
-        embedding=[]
+        embedding = []
         model.eval()
         with torch.no_grad():
             for _ , X in loader_loop:
