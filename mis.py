@@ -411,6 +411,8 @@ class task_config:
         Args:
             activations: New activation tensor (N_images x N_units)
         """
+        del self.y_data
+
         self.y_data = torch.transpose(activations , 0, 1)
         self.y_sort_id = torch.argsort(self.y_data, dim=1, descending=False)
 
