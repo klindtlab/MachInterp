@@ -6,6 +6,28 @@ import math
 from metric import process
 
 
+def randomized_argsort_torch(t, dim=1, descending=False):
+    """
+    Performs a randomized argsort operation on a PyTorch tensor by adding small random values to break ties.
+    Args:
+        t (torch.Tensor): Input tensor to be argsorted.
+    Returns:
+        torch.Tensor: Indices that would sort the input tensor with random tie-breaking.
+    Description:
+        This function adds small random values (1e-6 scale) to the input tensor before sorting
+        to randomly break ties between equal values. This ensures a unique ordering even when 
+        multiple elements have the same value.
+    Example:
+        >>> x = torch.tensor([1, 2, 2, 3])
+        >>> randomized_argsort_torch(x)
+        tensor([0, 1, 2, 3])  # Order of indices 1,2 will be randomized due to equal values
+    """
+    # Generate random tie-breaker indices
+    random_tiebreakers = torch.rand(t.shape) * 1e-10
+    
+    # Perform argsort with the random tiebreakers to break ties
+    return torch.argsort(t + random_tiebreakers.to(t.device), dim=dim, descending=descending)
+
 def get(set, x):
     """Basic indexing function to get item x from set."""
     return set[x]
@@ -373,7 +395,7 @@ class task_config:
 
         self.x_data = image_set
         self.y_data = torch.transpose(activations , 0, 1)
-        self.y_sort_id = torch.argsort(self.y_data, dim=1, descending=False)
+        self.y_sort_id = randomized_argsort_torch(self.y_data, dim=1, descending=False)
         self.device = device
         self.processed = processed
 
@@ -412,9 +434,10 @@ class task_config:
             activations: New activation tensor (N_images x N_units)
         """
         del self.y_data
+        del self.y_sort_id
 
         self.y_data = torch.transpose(activations , 0, 1)
-        self.y_sort_id = torch.argsort(self.y_data, dim=1, descending=False)
+        self.y_sort_id = randomized_argsort_torch(self.y_data, dim=1, descending=False)
 
 
 def run_psychophysics(seed: int, task_data: task_config, metric_type: str,
