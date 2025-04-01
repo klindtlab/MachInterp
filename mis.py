@@ -382,7 +382,7 @@ class task_config:
     """
 
     def __init__(self, device: str, image_set: list[Image], activations: Tensor,
-                 processed: dict={}):
+                 processed: dict={}, seed: int=117):
         '''
         Initialize task_config with images and their corresponding activations.
 
@@ -394,14 +394,22 @@ class task_config:
         '''
 
         self.x_data = image_set
-        self.y_data = torch.transpose(activations , 0, 1)
-        self.y_sort_id = randomized_argsort_torch(self.y_data, dim=1, descending=False)
+
+        self.shuffle_id = torch.randperm(activations.shape[0]).to('cpu')
+        self.reverse_shuffle_id = torch.argsort(self.shuffle_id)
+
+        self.y_data = torch.transpose(activations[self.shuffle_id] , 0, 1)
+        self.y_sort_id = torch.argsort(self.y_data, dim=1, descending=False)
+
         self.device = device
         self.processed = processed
+        for key , value in self.processed.items():
+            self.processed[key] = value[self.shuffle_id]
 
     def __getitem__(self, index):
         """Get image and activation pair at given index."""
-        return self.x_data[index] , self.y_data[:,index]
+        y_rev_id = self.reverse_shuffle_id[index]
+        return self.x_data[index] , self.y_data[:, y_rev_id]
     
     def get_data(self, metric_type: str=None):
         """
@@ -417,14 +425,22 @@ class task_config:
         if metric_type is None:
             return self.x_data
         if metric_type in self.processed.keys():
+            return self.processed[metric_type][self.reverse_shuffle_id]
+        
+        unshuffled_processed = process(self.x_data, metric_type, self.device)
+        self.processed[metric_type] = unshuffled_processed[self.shuffle_id]
+        return unshuffled_processed
+    
+    def get_processed(self, metric_type):
+        if metric_type in self.processed.keys():
             return self.processed[metric_type]
         
-        self.processed[metric_type] = process(self.x_data, metric_type, self.device)
+        self.processed[metric_type] = process(self.x_data, metric_type, self.device)[self.shuffle_id]
         return self.processed[metric_type]
     
     def get_target(self):
         """Get activation values."""
-        return self.y_data
+        return self.y_data[:, self.reverse_shuffle_id]
     
     def replace_y(self, activations):
         """
@@ -433,11 +449,22 @@ class task_config:
         Args:
             activations: New activation tensor (N_images x N_units)
         """
+        prev_rev_shuffle_id = self.reverse_shuffle_id
+
         del self.y_data
+        del self.shuffle_id
+        del self.reverse_shuffle_id
         del self.y_sort_id
 
-        self.y_data = torch.transpose(activations , 0, 1)
-        self.y_sort_id = randomized_argsort_torch(self.y_data, dim=1, descending=False)
+        self.shuffle_id = torch.randperm(activations.shape[0]).to('cpu')
+        self.reverse_shuffle_id = torch.argsort(self.shuffle_id).to('cpu')
+
+        self.y_data = torch.transpose(activations[self.shuffle_id] , 0, 1)
+        self.y_sort_id = torch.argsort(self.y_data, dim=1, descending=False)
+
+        reshuffle_id = prev_rev_shuffle_id[self.shuffle_id]
+        for key , value in self.processed.items():
+            self.processed[key] = value[reshuffle_id]
 
 
 def run_psychophysics(seed: int, task_data: task_config, metric_type: str,
@@ -465,7 +492,7 @@ def run_psychophysics(seed: int, task_data: task_config, metric_type: str,
         metric = get_metric(metric_type, task_data.device)
 
     query_set , Explanation_set = \
-        query_explanation_generation(seed=seed, I_set=task_data.get_data(metric_type=metric_type), 
+        query_explanation_generation(seed=seed, I_set=task_data.get_processed(metric_type=metric_type), 
                                      activations=task_data.y_data, K=K, N=N,
                                      quantile=quantile, device=device,
                                      activations_sort_id=task_data.y_sort_id)
