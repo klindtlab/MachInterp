@@ -1,8 +1,6 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torchvision.transforms import ToTensor
-import cv2
 
 
 class Metric:
@@ -49,18 +47,14 @@ class DreamSimMetric(Metric):
     def preprocess(self, inputs):
         """
         Preprocess inputs using the DreamSim model's preprocessing.
-        Accepts a list of images or a numpy array.
+        Accepts numpy arrays or torch tensors.
         """
-        # If list of file paths, load them first.
-        if isinstance(inputs, list):
-            processed = [self.model_preprocess(img) for img in inputs]
-            return np.stack(processed)
-        elif isinstance(inputs, np.ndarray):
+        if isinstance(inputs, np.ndarray):
             return np.stack([self.model_preprocess(img) for img in inputs])
         elif torch.is_tensor(inputs):
             return inputs  # Assume already preprocessed.
         else:
-            return inputs
+            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -86,23 +80,19 @@ class LPIPSMetric(Metric):
         from lpips import LPIPS
         self.loss_fn = LPIPS(net='alex').to(self.device)
         self.ret_per_layer = ret_per_layer
-        self.to_tensor = ToTensor()
 
     def preprocess(self, inputs):
         """
         Preprocess images for LPIPS: convert to tensor, scale to [-1, 1].
-        Accepts a list of images or a numpy array.
+        Accepts numpy arrays or torch tensors.
         """
-        if isinstance(inputs, list):
-            processed = [(2 * self.to_tensor(img) - 1) for img in inputs]
-            return torch.stack(processed).to(self.device)
-        elif isinstance(inputs, np.ndarray):
-            processed = [(2 * self.to_tensor(img) - 1) for img in inputs]
-            return torch.stack(processed).to(self.device)
+        assert inputs.min() >= -1 and inputs.max() <= 1, "Input images must be normalized to [-1, 1]"
+        if isinstance(inputs, np.ndarray):
+            return torch.tensor(inputs, dtype=torch.float32, device=self.device)
         elif torch.is_tensor(inputs):
             return inputs
         else:
-            return inputs
+            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -116,45 +106,6 @@ class LPIPSMetric(Metric):
         return - output.detach().cpu().numpy()
 
 
-class MSEMetric(Metric):
-    def __init__(self, device: str = 'cpu'):
-        super().__init__(device)
-
-    def preprocess(self, inputs):
-        """
-        For MSE, no heavy preprocessing is needed.
-        Accepts numpy arrays, torch tensors, or a list of file paths.
-        """
-        if isinstance(inputs, list):
-            processed = []
-            for item in inputs:
-                if isinstance(item, str):
-                    # Load image from file and convert BGR to RGB.
-                    img = cv2.imread(item)
-                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                    processed.append(img)
-                else:
-                    processed.append(item)
-            return np.array(processed)
-        elif isinstance(inputs, np.ndarray):
-            return inputs
-        elif torch.is_tensor(inputs):
-            return inputs.cpu().numpy()
-        else:
-            return inputs
-
-    def similarity(self, batch_A, batch_B) -> np.ndarray:
-        """
-        Compute negative mean squared error between every pair.
-        """
-        # Flatten each image.
-        A = np.reshape(batch_A, (batch_A.shape[0], -1))
-        B = np.reshape(batch_B, (batch_B.shape[0], -1))
-        # Compute pairwise differences using broadcasting.
-        mse = np.mean((A[:, None, :] - B[None, :, :]) ** 2, axis=-1)
-        return -mse
-
-
 class SSIMMetric(Metric):
     def __init__(self, device: str = 'cpu'):
         super().__init__(device)
@@ -164,24 +115,14 @@ class SSIMMetric(Metric):
     def preprocess(self, inputs):
         """
         Preprocess images for SSIM.
-        Accepts numpy arrays, torch tensors, or a list of file paths.
+        Accepts numpy arrays or torch tensors.
         """
-        if isinstance(inputs, list):
-            processed = []
-            for item in inputs:
-                if isinstance(item, str):
-                    img = cv2.imread(item)
-                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                    processed.append(img)
-                else:
-                    processed.append(item)
-            return np.array(processed)
-        elif isinstance(inputs, np.ndarray):
+        if isinstance(inputs, np.ndarray):
             return inputs
         elif torch.is_tensor(inputs):
             return inputs.cpu().numpy()
         else:
-            return inputs
+            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -206,26 +147,58 @@ class SSIMMetric(Metric):
         return similarity_matrix
     
 
-class CosineMetric(Metric):
+def flatten_images(images):
+    """
+    Flatten images to 2D arrays.
+    """
+    return np.reshape(images, (images.shape[0], -1))
+
+
+class MSEMetric(Metric):
     def __init__(self, device: str = 'cpu'):
         super().__init__(device)
 
     def preprocess(self, inputs):
-        if isinstance(inputs, list):
-            return np.array(inputs)
-        elif isinstance(inputs, np.ndarray):
+        """
+        For MSE, no heavy preprocessing is needed.
+        Accepts numpy arrays or torch tensors.
+        """
+        if isinstance(inputs, np.ndarray):
             return inputs
         elif torch.is_tensor(inputs):
             return inputs.cpu().numpy()
         else:
-            return inputs
+            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
-        A = np.reshape(batch_A, (batch_A.shape[0], -1))
-        B = np.reshape(batch_B, (batch_B.shape[0], -1))
-        epsilon = 1e-8
-        A_norm = A / (np.linalg.norm(A, axis=1, keepdims=True) + epsilon)
-        B_norm = B / (np.linalg.norm(B, axis=1, keepdims=True) + epsilon)
+        """
+        Compute negative mean squared error between every pair.
+        """
+        flat_A = flatten_images(batch_A)
+        flat_B = flatten_images(batch_B)
+        # Compute pairwise differences using broadcasting.
+        mse = np.mean((flat_A[:, None, :] - flat_B[None, :, :]) ** 2, axis=-1)
+        return -mse
+    
+
+class CosineMetric(Metric):
+    def __init__(self, device: str = 'cpu', epsilon: float = 1e-8):
+        super().__init__(device)
+        self.epsilon = epsilon
+
+    def preprocess(self, inputs):
+        if isinstance(inputs, np.ndarray):
+            return inputs
+        elif torch.is_tensor(inputs):
+            return inputs.cpu().numpy()
+        else:
+            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
+
+    def similarity(self, batch_A, batch_B) -> np.ndarray:
+        flat_A = flatten_images(batch_A)
+        flat_B = flatten_images(batch_B)
+        A_norm = flat_A / (np.linalg.norm(flat_A, axis=1, keepdims=True) + self.epsilon)
+        B_norm = flat_B / (np.linalg.norm(flat_B, axis=1, keepdims=True) + self.epsilon)
         return np.dot(A_norm, B_norm.T)
 
 
@@ -235,14 +208,18 @@ class LabelMetric(Metric):
 
     def preprocess(self, inputs):
         """
-        For label-based metrics, assume inputs are already labels (ints, strings, etc.)
+        For label-based metrics, assume inputs are already labels.
+        Accepts numpy arrays or torch tensors.
         """
-        return inputs
+        if isinstance(inputs, np.ndarray):
+            return inputs
+        elif torch.is_tensor(inputs):
+            return inputs.cpu().numpy()
+        else:
+            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
         Compute similarity based on equality: 1 if labels are equal, 0 otherwise.
         """
-        batch_A = np.array(batch_A)
-        batch_B = np.array(batch_B)
-        return (batch_A[:, None] == batch_B[None, :]).astype(int)
+        return (np.array(batch_A)[:, None] == np.array(batch_B)[None, :]).astype(float)
