@@ -103,12 +103,13 @@ class LPIPSMetric(Metric):
 
 
 class SSIMMetric(Metric):
-    def __init__(self, device: str = 'cpu'):
-        super().__init__(device)
+    def __init__(self):
+        super().__init__()
         from skimage.metrics import structural_similarity as ssim_func
         self.ssim_func = ssim_func
 
     def preprocess(self, inputs):
+        assert inputs.min() >= -1 and inputs.max() <= 1, "Input images must be normalized to [-1, 1]"
         return self._to_numpy(inputs)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
@@ -121,16 +122,8 @@ class SSIMMetric(Metric):
         similarity_matrix = np.zeros((num_A, num_B))
         for i in range(num_A):
             for j in range(num_B):
-                img_A = batch_A[i]
-                img_B = batch_B[j]
-                # Convert RGB to grayscale if needed.
-                if img_A.ndim == 3 and img_A.shape[2] == 3:
-                    img_A_gray = np.dot(img_A[...,:3], [0.2989, 0.5870, 0.1140])
-                    img_B_gray = np.dot(img_B[...,:3], [0.2989, 0.5870, 0.1140])
-                else:
-                    img_A_gray = img_A
-                    img_B_gray = img_B
-                similarity_matrix[i, j] = self.ssim_func(img_A_gray, img_B_gray)
+                similarity_matrix[i, j] = self.ssim_func(
+                    batch_A[i], batch_B[j], channel_axis=0, data_range=1)
         return similarity_matrix
     
 
@@ -142,8 +135,8 @@ def flatten_images(images):
 
 
 class MSEMetric(Metric):
-    def __init__(self, device: str = 'cpu'):
-        super().__init__(device)
+    def __init__(self):
+        super().__init__()
 
     def preprocess(self, inputs):
         return self._to_numpy(inputs)
@@ -160,8 +153,8 @@ class MSEMetric(Metric):
     
 
 class CosineMetric(Metric):
-    def __init__(self, device: str = 'cpu', epsilon: float = 1e-8):
-        super().__init__(device)
+    def __init__(self, epsilon: float = 1e-8):
+        super().__init__()
         self.epsilon = epsilon
 
     def preprocess(self, inputs):
@@ -176,8 +169,8 @@ class CosineMetric(Metric):
 
 
 class LabelMetric(Metric):
-    def __init__(self, device: str = 'cpu'):
-        super().__init__(device)
+    def __init__(self):
+        super().__init__()
 
     def preprocess(self, inputs):
         return self._to_numpy(inputs)
