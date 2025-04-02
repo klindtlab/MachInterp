@@ -1,4 +1,4 @@
 # use custom lpips version with batch support
-# https://github.com/david-klindt/PerceptualSimilarity/tree/batched
-from lpips import LPIPS
-from dreamsim import dreamsim
+# pip install git+https://github.com/richzhang/PerceptualSimilarity.git@refs/pull/124/merge
+
+# dreamsim

@@ -50,21 +50,18 @@ class DreamSimMetric(Metric):
         Accepts numpy arrays or torch tensors.
         """
         if isinstance(inputs, np.ndarray):
-            return np.stack([self.model_preprocess(img) for img in inputs])
+            inputs = torch.from_numpy(inputs, dtype=torch.float32, device=self.device)
         elif torch.is_tensor(inputs):
-            return inputs  # Assume already preprocessed.
+            inputs = inputs.to(torch.float32, device=self.device)
         else:
             raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
+        return self.model_preprocess(inputs)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
         Compute cosine similarity between embeddings.
         Converts numpy arrays to torch tensors if needed.
         """
-        if isinstance(batch_A, np.ndarray):
-            batch_A = torch.from_numpy(batch_A).to(self.device)
-        if isinstance(batch_B, np.ndarray):
-            batch_B = torch.from_numpy(batch_B).to(self.device)
         with torch.no_grad():
             embed_A = self.embed_fn(batch_A)
             embed_B = self.embed_fn(batch_B)
@@ -88,9 +85,9 @@ class LPIPSMetric(Metric):
         """
         assert inputs.min() >= -1 and inputs.max() <= 1, "Input images must be normalized to [-1, 1]"
         if isinstance(inputs, np.ndarray):
-            return torch.tensor(inputs, dtype=torch.float32, device=self.device)
+            inputs = torch.from_numpy(inputs, dtype=torch.float32, device=self.device)
         elif torch.is_tensor(inputs):
-            return inputs
+            inputs = inputs.to(torch.float32, device=self.device)
         else:
             raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
 
