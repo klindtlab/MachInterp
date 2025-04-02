@@ -15,6 +15,22 @@ class Metric:
     def __init__(self, device: str = 'cpu'):
         self.device = device
 
+    def _to_tensor(self, inputs):
+        if isinstance(inputs, np.ndarray):
+            return torch.from_numpy(inputs)
+        elif torch.is_tensor(inputs):
+            return inputs
+        else:
+            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
+    
+    def _to_numpy(self, inputs):
+        if isinstance(inputs, np.ndarray):
+            return inputs
+        elif torch.is_tensor(inputs):
+            return inputs.cpu().numpy()
+        else:
+            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
+
     def preprocess(self, inputs):
         raise NotImplementedError('Subclasses must implement preprocess')
 
@@ -41,21 +57,12 @@ class DreamSimMetric(Metric):
     def __init__(self, device: str = 'cpu'):
         super().__init__(device)
         from dreamsim import dreamsim
-        self.model, self.model_preprocess = dreamsim(pretrained=True, device=device)
+        self.model, _ = dreamsim(pretrained=True, device=device)
         self.embed_fn = self.model.embed
 
     def preprocess(self, inputs):
-        """
-        Preprocess inputs using the DreamSim model's preprocessing.
-        Accepts numpy arrays or torch tensors.
-        """
-        if isinstance(inputs, np.ndarray):
-            inputs = torch.from_numpy(inputs)
-        elif torch.is_tensor(inputs):
-            pass
-        else:
-            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
-        return self.model_preprocess(inputs.to(self.device, torch.float32))
+        tensor = self._to_tensor(inputs)
+        return tensor.to(self.device, torch.float32)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -79,18 +86,9 @@ class LPIPSMetric(Metric):
         self.ret_per_layer = ret_per_layer
 
     def preprocess(self, inputs):
-        """
-        Preprocess images for LPIPS: convert to tensor, scale to [-1, 1].
-        Accepts numpy arrays or torch tensors.
-        """
         assert inputs.min() >= -1 and inputs.max() <= 1, "Input images must be normalized to [-1, 1]"
-        if isinstance(inputs, np.ndarray):
-            inputs = torch.from_numpy(inputs)
-        elif torch.is_tensor(inputs):
-            pass
-        else:
-            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
-        return inputs.to(self.device, torch.float32)
+        tensor = self._to_tensor(inputs)
+        return tensor.to(self.device, torch.float32)
     
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -111,16 +109,7 @@ class SSIMMetric(Metric):
         self.ssim_func = ssim_func
 
     def preprocess(self, inputs):
-        """
-        Preprocess images for SSIM.
-        Accepts numpy arrays or torch tensors.
-        """
-        if isinstance(inputs, np.ndarray):
-            return inputs
-        elif torch.is_tensor(inputs):
-            return inputs.cpu().numpy()
-        else:
-            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
+        return self._to_numpy(inputs)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -157,16 +146,7 @@ class MSEMetric(Metric):
         super().__init__(device)
 
     def preprocess(self, inputs):
-        """
-        For MSE, no heavy preprocessing is needed.
-        Accepts numpy arrays or torch tensors.
-        """
-        if isinstance(inputs, np.ndarray):
-            return inputs
-        elif torch.is_tensor(inputs):
-            return inputs.cpu().numpy()
-        else:
-            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
+        return self._to_numpy(inputs)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -185,12 +165,7 @@ class CosineMetric(Metric):
         self.epsilon = epsilon
 
     def preprocess(self, inputs):
-        if isinstance(inputs, np.ndarray):
-            return inputs
-        elif torch.is_tensor(inputs):
-            return inputs.cpu().numpy()
-        else:
-            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
+        return self._to_numpy(inputs)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         flat_A = flatten_images(batch_A)
@@ -205,16 +180,7 @@ class LabelMetric(Metric):
         super().__init__(device)
 
     def preprocess(self, inputs):
-        """
-        For label-based metrics, assume inputs are already labels.
-        Accepts numpy arrays or torch tensors.
-        """
-        if isinstance(inputs, np.ndarray):
-            return inputs
-        elif torch.is_tensor(inputs):
-            return inputs.cpu().numpy()
-        else:
-            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
+        return self._to_numpy(inputs)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
