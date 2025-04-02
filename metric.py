@@ -55,7 +55,7 @@ class DreamSimMetric(Metric):
             pass
         else:
             raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
-        return self.model_preprocess(inputs.to(torch.float32, device=self.device))
+        return self.model_preprocess(inputs.to(self.device, torch.float32))
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -90,7 +90,7 @@ class LPIPSMetric(Metric):
             pass
         else:
             raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
-        return inputs.to(torch.float32, device=self.device)
+        return inputs.to(self.device, torch.float32)
     
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
