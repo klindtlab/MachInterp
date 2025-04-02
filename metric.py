@@ -123,7 +123,7 @@ class SSIMMetric(Metric):
         for i in range(num_A):
             for j in range(num_B):
                 similarity_matrix[i, j] = self.ssim_func(
-                    batch_A[i], batch_B[j], channel_axis=0, data_range=1)
+                    batch_A[i], batch_B[j], channel_axis=0, data_range=2)
         return similarity_matrix
     
 
