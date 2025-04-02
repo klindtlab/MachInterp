@@ -98,9 +98,9 @@ class LPIPSMetric(Metric):
         Returns negative LPIPS distance as similarity.
         """
         with torch.no_grad():
-            _, output = self.loss_fn(batch_A, batch_B, normalize=True, retPerLayer=self.ret_per_layer)
+            output = self.loss_fn(batch_A, batch_B, normalize=True, retPerLayer=self.ret_per_layer)
             if self.ret_per_layer:
-                output = torch.stack(output, dim=-1)
+                output = torch.stack(output[1], dim=-1)
         return - output.detach().cpu().numpy()
 
 
