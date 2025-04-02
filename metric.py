@@ -50,12 +50,12 @@ class DreamSimMetric(Metric):
         Accepts numpy arrays or torch tensors.
         """
         if isinstance(inputs, np.ndarray):
-            inputs = torch.from_numpy(inputs, dtype=torch.float32, device=self.device)
+            inputs = torch.from_numpy(inputs)
         elif torch.is_tensor(inputs):
-            inputs = inputs.to(torch.float32, device=self.device)
+            pass
         else:
             raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
-        return self.model_preprocess(inputs)
+        return self.model_preprocess(inputs.to(torch.float32, device=self.device))
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -85,12 +85,13 @@ class LPIPSMetric(Metric):
         """
         assert inputs.min() >= -1 and inputs.max() <= 1, "Input images must be normalized to [-1, 1]"
         if isinstance(inputs, np.ndarray):
-            inputs = torch.from_numpy(inputs, dtype=torch.float32, device=self.device)
+            inputs = torch.from_numpy(inputs)
         elif torch.is_tensor(inputs):
-            inputs = inputs.to(torch.float32, device=self.device)
+            pass
         else:
             raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
-
+        return inputs.to(torch.float32, device=self.device)
+    
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
         Compute LPIPS similarity between every pair in the two batches.
