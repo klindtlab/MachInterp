@@ -1,46 +1,9 @@
 import numpy as np
 from typing import Optional, List
-
-import os
-import sys
 from tqdm import tqdm
 
-from helpers import randomized_argsort, softmax, get_extreme_ind
+from helpers import randomized_argsort, get_extreme_ind
 from metric import Metric
-
-
-def run_psychophysics(
-        inputs: np.ndarray,
-        activations: np.ndarray,
-        quantiles: Optional[List[float]] = [0.0, 0.25],
-        metric: Optional[Metric] = None,
-        ):
-    """
-    Conducts a psychophysics experiment on all units.
-    See https://arxiv.org/pdf/2307.05471.pdf Appendix A.2
-
-    Parameters:
-    inputs (np.ndarray): The input data for the experiment.
-    activations (np.ndarray): The activations of the units.
-    metric (callable, optional): The metric function to use. If None, a metric function is obtained using get_metric.
-
-    Returns:
-    dict: A dict containing the logits and accuracy of the experiment.
-    """
-    result = {}
-    num_unit = activations.shape[1]
-
-    for i in tqdm(range(num_unit)):
-        output = run_single_unit_psychophysics(
-            inputs=inputs, activations=activations[:, i], 
-            metric=metric, quantiles=quantiles)
-        for key in output:
-            if i == 0:
-                result[key] = []
-            result[key].append(output[key])
-            if i == num_unit - 1:
-                result[key] = np.stack(result[key], 0)
-    return result
 
 
 def extract_logits(similarities, zscore, pool_fun):
@@ -72,7 +35,7 @@ def run_single_unit_psychophysics(
         inputs: np.ndarray,
         activations: np.ndarray,
         metrics: dict[str, Metric],
-        quantiles: Optional[List[float]] = [0.0, 0.25], 
+        quantiles: Optional[List[float]] = [0.0, 0.25],
         num_trials: int = 20, 
         num_references: int = 9,
         pool_fun: callable = np.mean,  # min/max would not make sense with label
@@ -84,7 +47,7 @@ def run_single_unit_psychophysics(
 
     Parameters:
     inputs (np.ndarray): The input data for the experiment.
-    activations (np.ndarray): The activations of the units.
+    activations (np.ndarray): The activations of a unit.
     metrics (dict[str, Metric]): The metrics to use.
     quantiles (List[float], optional): The quantiles to consider. Defaults to [0.0, 0.25].
     num_trials (int, optional): The number of trials to conduct. Defaults to 20.
@@ -98,17 +61,6 @@ def run_single_unit_psychophysics(
     """
     if len(activations.shape) != 1:
         raise ValueError("Activations must be a vector, but have shape %s." % list(activations.shape))
-    if inputs.shape[0] != activations.shape[0]:
-        raise ValueError("Input and activations must have the same first dimension.")
-    if not all(q1 <= q2 for q1, q2 in zip(quantiles, quantiles[1:])):
-        raise ValueError("Quantiles must be in ascending order.")
-    if quantiles[0] < 0.0:
-        raise ValueError("First quantile must be >= 0.0.")
-    if quantiles[-1] >= 0.5:
-        raise ValueError("Last quantile must be < 0.5.")
-    # make sure there is at least twice as many left as we need.
-    if activations.shape[0] <= num_trials * (num_references + 1) * 2 * 2:
-        raise ValueError("Not enough data for the specified number of trials and references.")
         
     np.random.seed(seed)
     output = dict()
@@ -160,3 +112,69 @@ def run_single_unit_psychophysics(
             output['accuracy' + key[6:]] = compute_accuracy(output[key])
         
     return output
+
+
+def run_psychophysics(
+        inputs: np.ndarray,
+        activations: np.ndarray,
+        metrics: dict[str, Metric],
+        quantiles: Optional[List[float]] = [0.0, 0.25], 
+        num_trials: int = 20, 
+        num_references: int = 9,
+        pool_fun: callable = np.mean,  # min/max would not make sense with label
+        zscore: bool = True,
+        seed: int = 42
+        ):
+    """
+    Conducts a psychophysics experiment on all units.
+    See https://arxiv.org/pdf/2307.05471.pdf Appendix A.2
+
+    Parameters:
+    inputs (np.ndarray): The input data for the experiment.
+    activations (np.ndarray): The activations of a unit.
+    metrics (dict[str, Metric]): The metrics to use.
+    quantiles (List[float], optional): The quantiles to consider. Defaults to [0.0, 0.25].
+    num_trials (int, optional): The number of trials to conduct. Defaults to 20.
+    num_references (int, optional): The number of reference units to consider. Defaults to 9.
+    pool_function (callable, optional): The function to use for pooling. Defaults to np.mean.
+    zscore (bool, optional): Whether to z-score (subtract mean and divide by std.dev.) similarity measures.
+    seed (int, optional): The seed for the random number generator. Defaults to 42.
+
+    Returns:
+    dict: A dict containing the logits and accuracy of the experiment.
+    """
+    assert len(activations.shape) == 2, "Activations must be a matrix, but have shape %s." % list(activations.shape)
+    if inputs.shape[0] != activations.shape[0]:
+        raise ValueError("Input and activations must have the same first dimension.")
+    if not all(q1 <= q2 for q1, q2 in zip(quantiles, quantiles[1:])):
+        raise ValueError("Quantiles must be in ascending order.")
+    if quantiles[0] < 0.0:
+        raise ValueError("First quantile must be >= 0.0.")
+    if quantiles[-1] > 0.5:
+        raise ValueError("Last quantile must be <= 0.5.")
+    max_trials = activations.shape[0] // ((num_references + 1) * 2)
+    if activations.shape[0] <= num_trials * (num_references + 1) * 2:
+        raise ValueError("Not enough data for the specified number of trials and references. At most num_trials=%s." % max_trials)
+    
+    result = {}
+    num_unit = activations.shape[1]
+
+    for i in tqdm(range(num_unit)):
+        output = run_single_unit_psychophysics(
+            inputs=inputs, 
+            activations=activations[:, i], 
+            metrics=metrics, 
+            quantiles=quantiles,
+            num_trials=num_trials,
+            num_references=num_references,
+            pool_fun=pool_fun,
+            zscore=zscore,
+            seed=seed,
+        )
+        for key in output:
+            if i == 0:
+                result[key] = []
+            result[key].append(output[key])
+            if i == num_unit - 1:
+                result[key] = np.stack(result[key], 0)
+    return result

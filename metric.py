@@ -108,16 +108,24 @@ class DreamSimMetric(Metric):
         print('Dreamsim: Precomputed embeddings. Now, use precomputed_similarity with indices!')
         self.precomputed = True
 
+        embeddings = self.embeddings.to(self.device)
+        self.similarity_matrix = F.cosine_similarity(
+            embeddings[:, None], embeddings[None], dim=-1
+        ).cpu().numpy()
+
     def precomputed_similarity(self, ind_batch_A, ind_batch_B):
         assert self.precomputed, "Precomputed embeddings are not available"
         assert len(ind_batch_A.shape) == 1 and len(ind_batch_B.shape) == 1, "inputs must be 1D arrays of indices"
-        ind_batch_A = self._to_tensor(ind_batch_A).to(torch.int64)
-        ind_batch_B = self._to_tensor(ind_batch_B).to(torch.int64)
-        with torch.no_grad():
-            embed_A = self.embeddings[ind_batch_A].to(self.device)
-            embed_B = self.embeddings[ind_batch_B].to(self.device)
-            similarity_matrix = F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1)
-        return similarity_matrix.cpu().numpy()
+        # ind_batch_A = self._to_tensor(ind_batch_A).to(torch.int64)
+        # ind_batch_B = self._to_tensor(ind_batch_B).to(torch.int64)
+        # with torch.no_grad():
+        #     embed_A = self.embeddings[ind_batch_A].to(self.device)
+        #     embed_B = self.embeddings[ind_batch_B].to(self.device)
+        #     similarity_matrix = F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1)
+        # return similarity_matrix.cpu().numpy()
+        ind_batch_A = self._to_numpy(ind_batch_A).astype(int)
+        ind_batch_B = self._to_numpy(ind_batch_B).astype(int)
+        return self.similarity_matrix[np.ix_(ind_batch_A, ind_batch_B)]
 
 
 class LPIPSMetric(Metric):

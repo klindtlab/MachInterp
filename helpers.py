@@ -27,16 +27,6 @@ def randomized_argsort(arr, descending=False):
         idx = idx[::-1]
     return idx
 
-def softmax(x):
-    exp = np.exp(x)
-    return exp / np.sum(exp, axis=-1, keepdims=True)
-
-def get_center_ind(activations, quantile):
-    """Get indices of all activations in center quantile, only use distribution center between quantiles."""
-    return np.logical_and(
-        activations >= np.quantile(activations, quantile), 
-        activations <= np.quantile(activations, 1 - quantile))
-
 def get_extreme_ind(activations, quantile):
     """Get indices of all activations outside center quantile, only use distribution outside center quantiles."""
     return np.logical_or(
