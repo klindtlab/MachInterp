@@ -92,16 +92,12 @@ def run_single_unit_psychophysics(
             ind_reference = np.concatenate([ind_reference_top, ind_reference_bottom])
             ind_query = np.array([ind_query_top[trial_index], ind_query_bottom[trial_index]])
             
-            # Get inputs for this trial
-            reference = inputs[ind_reference]
-            query = inputs[ind_query]
-            
             # Calculate similarities for each metric
             for key, metric in metrics.items():
                 if metric.precomputed:
                     similarities = metric.precomputed_similarity(ind_reference, ind_query)
                 else:
-                    similarities = metric.compute_similarity(reference, query)
+                    similarities = metric.compute_similarity(inputs[ind_reference], inputs[ind_query])
                 output['logits_%s' % key][quantile_index, trial_index] = extract_logits(
                     similarities, zscore, pool_fun)
 

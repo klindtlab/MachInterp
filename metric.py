@@ -93,7 +93,7 @@ class DreamSimMetric(Metric):
         Precompute embeddings for all inputs.
         batch_size is just for precomputing of embeddings.
         """
-        print('Dreamsim: Embedding images')
+        print('Embedding images.')
         dataloader = torch.utils.data.DataLoader(
             TensorDataset(self._to_tensor(inputs).to(torch.float32)),
             batch_size=batch_size, 
@@ -103,15 +103,15 @@ class DreamSimMetric(Metric):
         with torch.no_grad():
             for batch in tqdm(dataloader):
                 embeddings.append(self.embed_fn(batch[0].to(self.device)).cpu())
+        self.model.cpu()
         self.embeddings = torch.cat(embeddings, dim=0)
         assert self.embeddings.shape[0] == len(inputs), "Embedding shape does not match input length"
+        print("Computing similarities.")
+        embeddings = F.normalize(self.embeddings, p=2, dim=1).to(self.device)
+        self.similarity_matrix = (embeddings @ embeddings.T).cpu().numpy()
+        del embeddings
         print('Dreamsim: Precomputed embeddings. Now, use precomputed_similarity with indices!')
         self.precomputed = True
-
-        embeddings = self.embeddings.to(self.device)
-        self.similarity_matrix = F.cosine_similarity(
-            embeddings[:, None], embeddings[None], dim=-1
-        ).cpu().numpy()
 
     def precomputed_similarity(self, ind_batch_A, ind_batch_B):
         assert self.precomputed, "Precomputed embeddings are not available"
