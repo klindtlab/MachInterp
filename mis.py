@@ -5,14 +5,8 @@ import os
 import sys
 from tqdm import tqdm
 
-from helpers import randomized_argsort, softmax
+from helpers import randomized_argsort, softmax, get_extreme_ind
 from metric import Metric
-
-def get_center_ind(activations, quantile):
-    """Get indices of all activations in center quantile, only use distribution center between quantiles."""
-    return np.logical_and(
-        activations >= np.quantile(activations, quantile), 
-        activations <= np.quantile(activations, 1 - quantile))
 
 
 def run_psychophysics(
@@ -31,7 +25,7 @@ def run_psychophysics(
     metric (callable, optional): The metric function to use. If None, a metric function is obtained using get_metric.
 
     Returns:
-    dict: A dict containing the logits and score of the experiment.
+    dict: A dict containing the logits and accuracy of the experiment.
     """
     result = {}
     num_unit = activations.shape[1]
@@ -67,16 +61,17 @@ def extract_logits(similarities, zscore, pool_fun):
     return logits
 
 
-def compute_score(logits):
+def compute_accuracy(logits):
     actual_logits = logits.sum(-1)  # summing evidences: Q x T x 2
-    score = np.mean(softmax(actual_logits)[:, :, 0], axis=1)  # probablity of correct answer: Q
-    return score * 2 - 1
+    accuracy = np.mean(actual_logits[:, :, 0] - actual_logits[:, :, 1] > 0, axis=1)
+    # score = np.mean(softmax(actual_logits)[:, :, 0], axis=1)  # probablity of correct answer: Q
+    return accuracy
 
 
 def run_single_unit_psychophysics(
         inputs: np.ndarray,
         activations: np.ndarray,
-        metric: Optional[Metric] = None,
+        metrics: dict[str, Metric],
         quantiles: Optional[List[float]] = [0.0, 0.25], 
         num_trials: int = 20, 
         num_references: int = 9,
@@ -90,7 +85,7 @@ def run_single_unit_psychophysics(
     Parameters:
     inputs (np.ndarray): The input data for the experiment.
     activations (np.ndarray): The activations of the units.
-    metric (Metric, optional): The metric function to use. If None, a metric function is obtained using get_metric.
+    metrics (dict[str, Metric]): The metrics to use.
     quantiles (List[float], optional): The quantiles to consider. Defaults to [0.0, 0.25].
     num_trials (int, optional): The number of trials to conduct. Defaults to 20.
     num_references (int, optional): The number of reference units to consider. Defaults to 9.
@@ -99,7 +94,7 @@ def run_single_unit_psychophysics(
     seed (int, optional): The seed for the random number generator. Defaults to 42.
 
     Returns:
-    dict: A tuple containing the logits and score of the experiment.
+    dict: A tuple containing the logits and accuracy of the experiment.
     """
     if len(activations.shape) != 1:
         raise ValueError("Activations must be a vector, but have shape %s." % list(activations.shape))
@@ -111,45 +106,57 @@ def run_single_unit_psychophysics(
         raise ValueError("First quantile must be >= 0.0.")
     if quantiles[-1] >= 0.5:
         raise ValueError("Last quantile must be < 0.5.")
-    # make sure there is at least twice as many left as we need for highest quantile.
-    if np.sum(get_center_ind(activations, quantiles[-1])) <= num_trials * (num_references + 1) * 2 * 2:
-        raise ValueError("Not enough data for the specified number of quantiles, trials and references.")
+    # make sure there is at least twice as many left as we need.
+    if activations.shape[0] <= num_trials * (num_references + 1) * 2 * 2:
+        raise ValueError("Not enough data for the specified number of trials and references.")
         
     np.random.seed(seed)
     output = dict()
-    output['logits'] = np.zeros((len(quantiles), num_trials, 2, 2))  # Q x T x 2 x 2
+    for key in metrics:
+        output['logits_%s' % key] = np.zeros((len(quantiles), num_trials, 2, 2))  # Q x T x 2 x 2
 
     for quantile_index, quantile in enumerate(quantiles):
-        ind = get_center_ind(activations, quantile)
-        y = activations[ind].copy()
-        x = inputs[ind].copy()
+        ind = get_extreme_ind(activations, quantile)
+        y = activations.copy()
+        y[ind] = np.median(y)
         
+        # Get sorted indices
         ind_sort_bottom = randomized_argsort(y)
         ind_sort_top = ind_sort_bottom[::-1]
-        ind_query_top = np.random.choice(num_trials, num_trials, replace=False)
-        ind_query_bottom = np.random.choice(num_trials, num_trials, replace=False)
-        query_top = x[ind_sort_top[:num_trials][ind_query_top]]
-        query_bottom = x[ind_sort_bottom[:num_trials][ind_query_bottom]]
+        
+        # Get query indices by shuffling the top num_trials
+        ind_query_top = np.random.permutation(ind_sort_top[:num_trials])
+        ind_query_bottom = np.random.permutation(ind_sort_bottom[:num_trials])
 
-        # permute only query, enough randomness, decreasing difficulty not a problem here
-        ind_reference = num_trials + np.arange(num_references) * num_trials
+        # Get reference indices
+        ind_reference_start = num_trials + np.arange(num_references) * num_trials
 
         for trial_index in range(num_trials):
-            reference_top = x[ind_sort_top[ind_reference + trial_index]]
-            reference_bottom = x[ind_sort_bottom[ind_reference + trial_index]]
+            # Get reference indices for this trial
+            ind_reference_top = ind_sort_top[ind_reference_start + trial_index]
+            ind_reference_bottom = ind_sort_bottom[ind_reference_start + trial_index]
             
-            # Run all together (twice as fast):
-            reference = np.concatenate([reference_top, reference_bottom], 0)
-            query = np.concatenate([query_top[trial_index:trial_index + 1], 
-                                    query_bottom[trial_index:trial_index + 1]])
-            similarities = metric(reference, query)
-            output['logits'][quantile_index, trial_index] = extract_logits(
-                similarities, zscore, pool_fun)
+            # Combine indices for batch processing
+            ind_reference = np.concatenate([ind_reference_top, ind_reference_bottom])
+            ind_query = np.array([ind_query_top[trial_index], ind_query_bottom[trial_index]])
+            
+            # Get inputs for this trial
+            reference = inputs[ind_reference]
+            query = inputs[ind_query]
+            
+            # Calculate similarities for each metric
+            for key, metric in metrics.items():
+                if metric.precomputed:
+                    similarities = metric.precomputed_similarity(ind_reference, ind_query)
+                else:
+                    similarities = metric.compute_similarity(reference, query)
+                output['logits_%s' % key][quantile_index, trial_index] = extract_logits(
+                    similarities, zscore, pool_fun)
 
-    # compute score
+    # compute accuracy
     keys = list(output.keys())
     for key in keys:
         if key.startswith('logits'):
-            output['score' + key[6:]] = compute_score(output[key])
+            output['accuracy' + key[6:]] = compute_accuracy(output[key])
         
     return output
