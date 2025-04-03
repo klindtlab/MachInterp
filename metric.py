@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+from tqdm import tqdm
 
 
 class Metric:
@@ -180,3 +181,46 @@ class LabelMetric(Metric):
         Compute similarity based on equality: 1 if labels are equal, 0 otherwise.
         """
         return (np.array(batch_A)[:, None] == np.array(batch_B)[None, :]).astype(float)
+    
+
+class SimpleDataset(torch.utils.data.Dataset):
+    def __init__(self, data):
+        self.data = data
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+
+class LazyDreamSimMetric(Metric):
+    def __init__(self, inputs, device: str = 'cpu', batch_size: int = 256):
+        super().__init__(device)
+        from dreamsim import dreamsim
+        self.model, _ = dreamsim(pretrained=True, device=device)
+        self.embed_fn = self.model.embed
+
+        print('Dreamsim: Embedding images')
+        if isinstance(inputs, np.ndarray):
+            dataset = torch.from_numpy(inputs)
+        elif torch.is_tensor(inputs):
+            dataset = inputs
+        dataloader = torch.utils.data.DataLoader(
+            SimpleDataset(torch.from_numpy(inputs.astype(np.float32)).to(torch.float32)), batch_size=batch_size, shuffle=False)
+        embeddings = []
+        for batch in tqdm(dataloader):
+            with torch.no_grad():
+                embeddings.append(self.embed_fn(batch.to(self.device)).cpu())
+        self.embeddings = torch.cat(embeddings, dim=0)
+        assert self.embeddings.shape[0] == len(inputs), "Embedding shape does not match input length"
+
+    def preprocess(self, inputs):
+        return inputs
+
+    def similarity(self, ind_batch_A, ind_batch_B) -> np.ndarray:
+        """
+        Compute cosine similarity between indices of embeddings
+        """
+        embed_A = self.embeddings[ind_batch_A].to(self.device)
+        embed_B = self.embeddings[ind_batch_B].to(self.device)
+        similarity_matrix = F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1)
+        return similarity_matrix.cpu().numpy()
