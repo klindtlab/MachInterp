@@ -1,7 +1,8 @@
 import numpy as np
+from tqdm import tqdm
 import torch
 import torch.nn.functional as F
-from tqdm import tqdm
+from torch.utils.data import TensorDataset, DataLoader
 
 
 class Metric:
@@ -15,6 +16,7 @@ class Metric:
     """
     def __init__(self, device: str = 'cpu'):
         self.device = device
+        self.precomputed = False
 
     def _to_tensor(self, inputs):
         if isinstance(inputs, np.ndarray):
@@ -42,16 +44,26 @@ class Metric:
         """
         Convenience method that wraps the similarity computation.
         """
-        try:
-            pre_A = self.preprocess(batch_A)
-            pre_B = self.preprocess(batch_B)
-        except Exception as e:
-            raise ValueError(f"Error during preprocessing: {e}")
+        if self.precomputed:
+            pre_A = batch_A
+            pre_B = batch_B
+        else:
+            try:
+                pre_A = self.preprocess(batch_A)
+                pre_B = self.preprocess(batch_B)
+            except Exception as e:
+                raise ValueError(f"Error during preprocessing: {e}")
         try:
             sim = self.similarity(pre_A, pre_B)
         except Exception as e:
             raise ValueError(f"Error during similarity computation: {e}")
         return sim
+    
+    def precompute(self, inputs, batch_size):
+        raise NotImplementedError('Subclass has not implemented precompute')
+    
+    def precomputed_similarity(self, ind_batch_A, ind_batch_B):
+        raise NotImplementedError('Subclass has not implemented precomputed_similarity')
 
 
 class DreamSimMetric(Metric):
@@ -59,7 +71,9 @@ class DreamSimMetric(Metric):
         super().__init__(device)
         from dreamsim import dreamsim
         self.model, _ = dreamsim(pretrained=True, device=device)
+        self.model.eval()
         self.embed_fn = self.model.embed
+        self.precomputed = False
 
     def preprocess(self, inputs):
         tensor = self._to_tensor(inputs)
@@ -73,6 +87,37 @@ class DreamSimMetric(Metric):
         with torch.no_grad():
             embed_A = self.embed_fn(batch_A)
             embed_B = self.embed_fn(batch_B)
+            similarity_matrix = F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1)
+        return similarity_matrix.cpu().numpy()
+    
+    def precompute(self, inputs, batch_size: int = 256):
+        """
+        Precompute embeddings for all inputs.
+        batch_size is just for precomputing of embeddings.
+        """
+        print('Dreamsim: Embedding images')
+        dataloader = torch.utils.data.DataLoader(
+            TensorDataset(self._to_tensor(inputs).to(torch.float32)),
+            batch_size=batch_size, 
+            shuffle=False
+        )
+        embeddings = []
+        with torch.no_grad():
+            for batch in tqdm(dataloader):
+                embeddings.append(self.embed_fn(batch[0].to(self.device)).cpu())
+        self.embeddings = torch.cat(embeddings, dim=0)
+        assert self.embeddings.shape[0] == len(inputs), "Embedding shape does not match input length"
+        print('Dreamsim: Precomputed embeddings. Now, use precomputed_similarity with indices!')
+        self.precomputed = True
+
+    def precomputed_similarity(self, ind_batch_A, ind_batch_B):
+        assert self.precomputed, "Precomputed embeddings are not available"
+        assert len(ind_batch_A.shape) == 1 and len(ind_batch_B.shape) == 1, "inputs must be 1D arrays of indices"
+        ind_batch_A = self._to_tensor(ind_batch_A).to(torch.int64)
+        ind_batch_B = self._to_tensor(ind_batch_B).to(torch.int64)
+        with torch.no_grad():
+            embed_A = self.embeddings[ind_batch_A].to(self.device)
+            embed_B = self.embeddings[ind_batch_B].to(self.device)
             similarity_matrix = F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1)
         return similarity_matrix.cpu().numpy()
 
@@ -181,46 +226,3 @@ class LabelMetric(Metric):
         Compute similarity based on equality: 1 if labels are equal, 0 otherwise.
         """
         return (np.array(batch_A)[:, None] == np.array(batch_B)[None, :]).astype(float)
-    
-
-class SimpleDataset(torch.utils.data.Dataset):
-    def __init__(self, data):
-        self.data = data
-    def __len__(self):
-        return len(self.data)
-    def __getitem__(self, idx):
-        return self.data[idx]
-
-
-class LazyDreamSimMetric(Metric):
-    def __init__(self, inputs, device: str = 'cpu', batch_size: int = 256):
-        super().__init__(device)
-        from dreamsim import dreamsim
-        self.model, _ = dreamsim(pretrained=True, device=device)
-        self.embed_fn = self.model.embed
-
-        print('Dreamsim: Embedding images')
-        if isinstance(inputs, np.ndarray):
-            dataset = torch.from_numpy(inputs)
-        elif torch.is_tensor(inputs):
-            dataset = inputs
-        dataloader = torch.utils.data.DataLoader(
-            SimpleDataset(torch.from_numpy(inputs.astype(np.float32)).to(torch.float32)), batch_size=batch_size, shuffle=False)
-        embeddings = []
-        for batch in tqdm(dataloader):
-            with torch.no_grad():
-                embeddings.append(self.embed_fn(batch.to(self.device)).cpu())
-        self.embeddings = torch.cat(embeddings, dim=0)
-        assert self.embeddings.shape[0] == len(inputs), "Embedding shape does not match input length"
-
-    def preprocess(self, inputs):
-        return inputs
-
-    def similarity(self, ind_batch_A, ind_batch_B) -> np.ndarray:
-        """
-        Compute cosine similarity between indices of embeddings
-        """
-        embed_A = self.embeddings[ind_batch_A].to(self.device)
-        embed_B = self.embeddings[ind_batch_B].to(self.device)
-        similarity_matrix = F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1)
-        return similarity_matrix.cpu().numpy()
