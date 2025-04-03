@@ -4,6 +4,8 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 
+from helpers import flatten_images
+
 
 class Metric:
     """
@@ -171,13 +173,6 @@ class SSIMMetric(Metric):
                 similarity_matrix[i, j] = self.ssim_func(
                     batch_A[i], batch_B[j], channel_axis=0, data_range=2)
         return similarity_matrix
-    
-
-def flatten_images(images):
-    """
-    Flatten images to 2D arrays.
-    """
-    return np.reshape(images, (images.shape[0], -1))
 
 
 class MSEMetric(Metric):
