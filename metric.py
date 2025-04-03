@@ -46,15 +46,11 @@ class Metric:
         """
         Convenience method that wraps the similarity computation.
         """
-        if self.precomputed:
-            pre_A = batch_A
-            pre_B = batch_B
-        else:
-            try:
-                pre_A = self.preprocess(batch_A)
-                pre_B = self.preprocess(batch_B)
-            except Exception as e:
-                raise ValueError(f"Error during preprocessing: {e}")
+        try:
+            pre_A = self.preprocess(batch_A)
+            pre_B = self.preprocess(batch_B)
+        except Exception as e:
+            raise ValueError(f"Error during preprocessing: {e}")
         try:
             sim = self.similarity(pre_A, pre_B)
         except Exception as e:

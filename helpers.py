@@ -26,3 +26,7 @@ def randomized_argsort(arr, descending=False):
     if descending:
         idx = idx[::-1]
     return idx
+
+def softmax(x):
+    exp = np.exp(x)
+    return exp / np.sum(exp, axis=-1, keepdims=True)
