@@ -4,8 +4,6 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 
-from helpers import flatten_images
-
 
 class Metric:
     """
@@ -16,8 +14,7 @@ class Metric:
                      into a common format for similarity computation.
       - similarity: compute a pairwise similarity matrix between two batches.
     """
-    def __init__(self, device: str = 'cpu'):
-        self.device = device
+    def __init__(self):
         self.precomputed = False
 
     def _to_tensor(self, inputs):
@@ -58,17 +55,44 @@ class Metric:
         return sim
     
     def precompute(self, inputs, batch_size):
-        raise NotImplementedError('Subclass has not implemented precompute')
+        """Precompute Similarities for entire dataset."""
+        N = inputs.shape[0]
+        self.similarity_matrix = np.zeros((N, N))
+        for i in tqdm(range(0, N, batch_size)):
+            end_i = min(i + batch_size, N)
+            x_i = inputs[i:end_i]
+            for j in range(0, N, batch_size):
+                end_j = min(j + batch_size, N)
+                x_j = inputs[j:end_j]
+                self.similarity_matrix[i:end_i, j:end_j] = self.compute_similarity(x_i, x_j)
+        self.precomputed = True
+        print('Precomputed similarities. Now, use precomputed_similarity with indices!')
+        print('You can also save metric.similarity_matrix and use it to initialize PrecomputedMetric')
+        print('this is to avoid precomputing next time.')
     
-    def precomputed_similarity(self, ind_batch_A, ind_batch_B):
-        raise NotImplementedError('Subclass has not implemented precomputed_similarity')
+    def precomputed_similarity(self, ind_batch_A, ind_batch_B) -> np.ndarray:
+        assert self.precomputed, "Precomputed embeddings are not available"
+        assert len(ind_batch_A.shape) == 1 and len(ind_batch_B.shape) == 1, "inputs must be 1D arrays of indices"
+        ind_batch_A = self._to_numpy(ind_batch_A).astype(int)
+        ind_batch_B = self._to_numpy(ind_batch_B).astype(int)
+        return self.similarity_matrix[np.ix_(ind_batch_A, ind_batch_B)]
+    
+
+class PrecomputedMetric(Metric):
+    def __init__(self, similarity_matrix):
+        super().__init__()
+        shape = similarity_matrix.shape
+        assert len(shape) == 2 and shape[0] == shape[1], "similarity_matrix must be square."
+        self.similarity_matrix = self._to_numpy(similarity_matrix)
+        self.precomputed = True
 
 
 class DreamSimMetric(Metric):
     def __init__(self, device: str = 'cpu'):
-        super().__init__(device)
+        super().__init__()
+        self.device = device
         from dreamsim import dreamsim
-        self.model, _ = dreamsim(pretrained=True, device=device)
+        self.model, _ = dreamsim(pretrained=True, device=self.device)
         self.model.eval()
         self.embed_fn = self.model.embed
         self.precomputed = False
@@ -88,10 +112,11 @@ class DreamSimMetric(Metric):
             similarity_matrix = F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1)
         return similarity_matrix.cpu().numpy()
     
-    def precompute(self, inputs, batch_size: int = 256):
+    def precompute(self, inputs, batch_size: int = 256, embeddings_only: bool = False):
         """
         Precompute embeddings for all inputs.
-        batch_size is just for precomputing of embeddings.
+        The batch_size is just for precomputing of embeddings.
+        Use embeddings_only for very large datasets that give OOM.
         """
         print('Embedding images.')
         dataloader = torch.utils.data.DataLoader(
@@ -106,31 +131,35 @@ class DreamSimMetric(Metric):
         self.model.cpu()
         self.embeddings = torch.cat(embeddings, dim=0)
         assert self.embeddings.shape[0] == len(inputs), "Embedding shape does not match input length"
-        print("Computing similarities.")
-        embeddings = F.normalize(self.embeddings, p=2, dim=1).to(self.device)
-        self.similarity_matrix = (embeddings @ embeddings.T).cpu().numpy()
-        del embeddings
-        print('Dreamsim: Precomputed embeddings. Now, use precomputed_similarity with indices!')
         self.precomputed = True
+        self.embeddings_only = embeddings_only
+        if not self.embeddings_only:
+            print("Computing similarities.")
+            self.similarity_matrix = F.cosine_similarity(
+                self.embeddings[:, None], self.embeddings[None], dim=-1).numpy()
+        print('Dreamsim: Precomputed embeddings and similarities. Now, use precomputed_similarity with indices!')
+        print('You can also save metric.similarity_matrix and use it to initialize PrecomputedMetric')
+        print('this is to avoid precomputing next time.')
 
-    def precomputed_similarity(self, ind_batch_A, ind_batch_B):
+    def precomputed_similarity(self, ind_batch_A, ind_batch_B) -> np.ndarray:
         assert self.precomputed, "Precomputed embeddings are not available"
         assert len(ind_batch_A.shape) == 1 and len(ind_batch_B.shape) == 1, "inputs must be 1D arrays of indices"
-        # ind_batch_A = self._to_tensor(ind_batch_A).to(torch.int64)
-        # ind_batch_B = self._to_tensor(ind_batch_B).to(torch.int64)
-        # with torch.no_grad():
-        #     embed_A = self.embeddings[ind_batch_A].to(self.device)
-        #     embed_B = self.embeddings[ind_batch_B].to(self.device)
-        #     similarity_matrix = F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1)
-        # return similarity_matrix.cpu().numpy()
-        ind_batch_A = self._to_numpy(ind_batch_A).astype(int)
-        ind_batch_B = self._to_numpy(ind_batch_B).astype(int)
-        return self.similarity_matrix[np.ix_(ind_batch_A, ind_batch_B)]
+        if self.embeddings_only:
+            ind_batch_A = self._to_tensor(ind_batch_A).to(torch.int64)
+            ind_batch_B = self._to_tensor(ind_batch_B).to(torch.int64)
+            embed_A = self.embeddings[ind_batch_A]
+            embed_B = self.embeddings[ind_batch_B]
+            return F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1).cpu().numpy()
+        else:
+            ind_batch_A = self._to_numpy(ind_batch_A).astype(int)
+            ind_batch_B = self._to_numpy(ind_batch_B).astype(int)
+            return self.similarity_matrix[np.ix_(ind_batch_A, ind_batch_B)]
 
 
 class LPIPSMetric(Metric):
     def __init__(self, device: str = 'cpu', ret_per_layer: bool = False):
-        super().__init__(device)
+        super().__init__()
+        self.device = device
         # use custom lpips version with batch support
         # https://github.com/david-klindt/PerceptualSimilarity/tree/batched
         from lpips import LPIPS
@@ -184,16 +213,16 @@ class MSEMetric(Metric):
         super().__init__()
 
     def preprocess(self, inputs):
-        return self._to_numpy(inputs)
+        return self._to_tensor(inputs)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
         Compute negative mean squared error between every pair.
         """
-        flat_A = flatten_images(batch_A)
-        flat_B = flatten_images(batch_B)
+        flat_A = torch.flatten(batch_A, start_dim=1)
+        flat_B = torch.flatten(batch_B, start_dim=1)
         # Compute pairwise differences using broadcasting.
-        mse = np.mean((flat_A[:, None, :] - flat_B[None, :, :]) ** 2, axis=-1)
+        mse = torch.mean((flat_A[:, None, :] - flat_B[None, :, :]) ** 2, dim=-1)
         return -mse
     
 
@@ -203,14 +232,15 @@ class CosineMetric(Metric):
         self.epsilon = epsilon
 
     def preprocess(self, inputs):
-        return self._to_numpy(inputs)
+        return self._to_tensor(inputs)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
-        flat_A = flatten_images(batch_A)
-        flat_B = flatten_images(batch_B)
-        A_norm = flat_A / (np.linalg.norm(flat_A, axis=1, keepdims=True) + self.epsilon)
-        B_norm = flat_B / (np.linalg.norm(flat_B, axis=1, keepdims=True) + self.epsilon)
-        return np.dot(A_norm, B_norm.T)
+        """
+        Compute cosine similarity between every pair.
+        """
+        flat_A = torch.flatten(batch_A, start_dim=1)
+        flat_B = torch.flatten(batch_B, start_dim=1)
+        return F.cosine_similarity(flat_A[:, None], flat_B[None], dim=-1).cpu().numpy()
 
 
 class LabelMetric(Metric):

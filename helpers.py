@@ -1,10 +1,5 @@
 import numpy as np
 
-def flatten_images(images):
-    """
-    Flatten images to 2D arrays.
-    """
-    return np.reshape(images, (images.shape[0], -1))
 
 def randomized_argsort(arr, descending=False):
     """
