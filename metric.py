@@ -16,6 +16,7 @@ class Metric:
     """
     def __init__(self):
         self.precomputed = False
+        self.num_scores = 1  # only relevant for LPIPS with multiple outputs (ret_per_layer)
 
     def _to_tensor(self, inputs):
         if isinstance(inputs, np.ndarray):
@@ -57,7 +58,10 @@ class Metric:
     def precompute(self, inputs, batch_size):
         """Precompute Similarities for entire dataset."""
         N = inputs.shape[0]
-        self.similarity_matrix = np.zeros((N, N))
+        if self.num_scores > 1:
+            self.similarity_matrix = np.zeros((N, N, self.num_scores))
+        else:
+            self.similarity_matrix = np.zeros((N, N))
         for i in tqdm(range(0, N, batch_size)):
             end_i = min(i + batch_size, N)
             x_i = inputs[i:end_i]
@@ -82,9 +86,11 @@ class PrecomputedMetric(Metric):
     def __init__(self, similarity_matrix):
         super().__init__()
         shape = similarity_matrix.shape
-        assert len(shape) == 2 and shape[0] == shape[1], "similarity_matrix must be square."
+        assert shape[0] == shape[1], "similarity_matrix must be square."
         self.similarity_matrix = self._to_numpy(similarity_matrix)
         self.precomputed = True
+        if len(shape) > 2:
+            self.num_scores = shape[2]
 
 
 class DreamSimMetric(Metric):
@@ -99,7 +105,7 @@ class DreamSimMetric(Metric):
 
     def preprocess(self, inputs):
         tensor = self._to_tensor(inputs)
-        return tensor.to(self.device, torch.float32)
+        return tensor.to(torch.float32)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -107,8 +113,8 @@ class DreamSimMetric(Metric):
         Converts numpy arrays to torch tensors if needed.
         """
         with torch.no_grad():
-            embed_A = self.embed_fn(batch_A)
-            embed_B = self.embed_fn(batch_B)
+            embed_A = self.embed_fn(batch_A.to(self.device))
+            embed_B = self.embed_fn(batch_B.to(self.device))
             similarity_matrix = F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1)
         return similarity_matrix.cpu().numpy()
     
@@ -163,13 +169,17 @@ class LPIPSMetric(Metric):
         # use custom lpips version with batch support
         # https://github.com/david-klindt/PerceptualSimilarity/tree/batched
         from lpips import LPIPS
-        self.loss_fn = LPIPS(net='alex').to(self.device)
+        self.loss_fn = LPIPS(net='alex').eval().to(self.device)
         self.ret_per_layer = ret_per_layer
+        if self.ret_per_layer:
+            self.num_scores = 5
 
     def preprocess(self, inputs):
-        assert inputs.min() >= -1 and inputs.max() <= 1, "Input images must be normalized to [-1, 1]"
         tensor = self._to_tensor(inputs)
-        return tensor.to(self.device, torch.float32)
+        if tensor.dtype == torch.uint8:
+            tensor = tensor.to(torch.float32) / 255 * 2 - 1
+        assert tensor.min() >= -1 and tensor.max() <= 1, "Input images must be normalized to [-1, 1]"        
+        return tensor.to(torch.float32)
     
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -177,7 +187,9 @@ class LPIPSMetric(Metric):
         Returns negative LPIPS distance as similarity.
         """
         with torch.no_grad():
-            output = self.loss_fn(batch_A, batch_B, normalize=True, retPerLayer=self.ret_per_layer)
+            output = self.loss_fn(
+                batch_A.to(self.device), batch_B.to(self.device), 
+                normalize=True, retPerLayer=self.ret_per_layer)
             if self.ret_per_layer:
                 output = torch.stack(output[1], dim=-1)
         return - output.detach().cpu().numpy()
@@ -190,8 +202,11 @@ class SSIMMetric(Metric):
         self.ssim_func = ssim_func
 
     def preprocess(self, inputs):
-        assert inputs.min() >= -1 and inputs.max() <= 1, "Input images must be normalized to [-1, 1]"
-        return self._to_numpy(inputs)
+        inputs = self._to_numpy(inputs)
+        if inputs.dtype == np.uint8:
+            inputs = inputs.astype(np.float32) / 255 * 2 - 1
+        assert inputs.min() >= -1 and inputs.max() <= 1, "Input images must be normalized to [-1, 1]"   
+        return inputs.astype(np.float32)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -213,7 +228,7 @@ class MSEMetric(Metric):
         super().__init__()
 
     def preprocess(self, inputs):
-        return self._to_tensor(inputs)
+        return self._to_tensor(inputs).to(torch.float32)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -232,7 +247,7 @@ class CosineMetric(Metric):
         self.epsilon = epsilon
 
     def preprocess(self, inputs):
-        return self._to_tensor(inputs)
+        return self._to_tensor(inputs).to(torch.float32)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """

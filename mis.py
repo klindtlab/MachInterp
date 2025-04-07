@@ -64,8 +64,12 @@ def run_single_unit_psychophysics(
         
     np.random.seed(seed)
     output = dict()
-    for key in metrics:
-        output['logits_%s' % key] = np.zeros((len(quantiles), num_trials, 2, 2))  # Q x T x 2 x 2
+    for key, metric in metrics.items():
+        if metric.num_scores > 1:
+            for i in range(metric.num_scores):
+                output['logits_%s_%s' % (key, i)] = np.zeros((len(quantiles), num_trials, 2, 2))  # Q x T x 2 x 2
+        else:
+            output['logits_%s' % key] = np.zeros((len(quantiles), num_trials, 2, 2))  # Q x T x 2 x 2
 
     for quantile_index, quantile in enumerate(quantiles):
         ind = get_extreme_ind(activations, quantile)
@@ -98,8 +102,14 @@ def run_single_unit_psychophysics(
                     similarities = metric.precomputed_similarity(ind_reference, ind_query)
                 else:
                     similarities = metric.compute_similarity(inputs[ind_reference], inputs[ind_query])
-                output['logits_%s' % key][quantile_index, trial_index] = extract_logits(
-                    similarities, zscore, pool_fun)
+                if metric.num_scores > 1:
+                    for i in range(metric.num_scores):
+                        output['logits_%s_%s' % (key, i)][quantile_index, trial_index] = extract_logits(
+                            similarities[:, :, i], zscore, pool_fun)
+                else:
+                    output['logits_%s' % key][quantile_index, trial_index] = extract_logits(
+                        similarities, zscore, pool_fun)
+                
 
     # compute accuracy
     keys = list(output.keys())
