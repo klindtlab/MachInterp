@@ -188,8 +188,7 @@ class LPIPSMetric(Metric):
             output = self.loss_fn(
                 batch_A.to(self.device), batch_B.to(self.device), 
                 normalize=True, retPerLayer=True)
-            if self.ret_per_layer:
-                output = torch.stack([output[0]] + output[1], dim=-1)
+            output = torch.stack([output[0]] + output[1], dim=-1)
         return - output.detach().cpu().numpy()
 
 
