@@ -16,7 +16,7 @@ class Metric:
     """
     def __init__(self):
         self.precomputed = False
-        self.num_scores = 1  # only relevant for LPIPS with multiple outputs (ret_per_layer)
+        self.num_scores = 1  # only relevant for LPIPS with multiple outputs
 
     def _to_tensor(self, inputs):
         if isinstance(inputs, np.ndarray):
@@ -163,16 +163,14 @@ class DreamSimMetric(Metric):
 
 
 class LPIPSMetric(Metric):
-    def __init__(self, device: str = 'cpu', ret_per_layer: bool = False):
+    def __init__(self, device: str = 'cpu'):
         super().__init__()
         self.device = device
         # use custom lpips version with batch support
         # https://github.com/david-klindt/PerceptualSimilarity/tree/batched
         from lpips import LPIPS
         self.loss_fn = LPIPS(net='alex').eval().to(self.device)
-        self.ret_per_layer = ret_per_layer
-        if self.ret_per_layer:
-            self.num_scores = 5
+        self.num_scores = 6  # total and layers 1, 2, 3, 4, 5
 
     def preprocess(self, inputs):
         tensor = self._to_tensor(inputs)
@@ -189,9 +187,9 @@ class LPIPSMetric(Metric):
         with torch.no_grad():
             output = self.loss_fn(
                 batch_A.to(self.device), batch_B.to(self.device), 
-                normalize=True, retPerLayer=self.ret_per_layer)
+                normalize=True, retPerLayer=True)
             if self.ret_per_layer:
-                output = torch.stack(output[1], dim=-1)
+                output = torch.stack([output[0]] + output[1], dim=-1)
         return - output.detach().cpu().numpy()
 
 

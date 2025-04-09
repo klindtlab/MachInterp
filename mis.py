@@ -67,7 +67,10 @@ def run_single_unit_psychophysics(
     for key, metric in metrics.items():
         if metric.num_scores > 1:
             for i in range(metric.num_scores):
-                output['logits_%s_%s' % (key, i)] = np.zeros((len(quantiles), num_trials, 2, 2))  # Q x T x 2 x 2
+                if 'lpips' in key and i == 0:
+                    output['logits_lpips'] = np.zeros((len(quantiles), num_trials, 2, 2))  # Q x T x 2 x 2
+                else:
+                    output['logits_%s_%s' % (key, i)] = np.zeros((len(quantiles), num_trials, 2, 2))  # Q x T x 2 x 2
         else:
             output['logits_%s' % key] = np.zeros((len(quantiles), num_trials, 2, 2))  # Q x T x 2 x 2
 
@@ -104,8 +107,12 @@ def run_single_unit_psychophysics(
                     similarities = metric.compute_similarity(inputs[ind_reference], inputs[ind_query])
                 if metric.num_scores > 1:
                     for i in range(metric.num_scores):
-                        output['logits_%s_%s' % (key, i)][quantile_index, trial_index] = extract_logits(
-                            similarities[:, :, i], zscore, pool_fun)
+                        if 'lpips' in key and i == 0:
+                            output['logits_lpips'][quantile_index, trial_index] = extract_logits(
+                                similarities[:, :, i], zscore, pool_fun)
+                        else:
+                            output['logits_%s_%s' % (key, i)][quantile_index, trial_index] = extract_logits(
+                                similarities[:, :, i], zscore, pool_fun)
                 else:
                     output['logits_%s' % key][quantile_index, trial_index] = extract_logits(
                         similarities, zscore, pool_fun)
