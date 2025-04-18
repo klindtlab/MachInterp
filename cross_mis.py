@@ -108,13 +108,13 @@ def compute_score(
         raise ValueError("Input and activations must have the same first dimension.")
     if not all(q1 <= q2 for q1, q2 in zip(ks[:-1], ks[1:])):
         raise ValueError("Ks must be in ascending order.")
+    if type(ks) == type(None):
+        ks = 2 ** np.arange(1, int(np.ceil(np.log2(num_data // 2))))
     if ks[0] < 2:
         raise ValueError("First k must be >= 2.")
     if ks[-1] > num_data // 2:
         raise ValueError("Last k must be less than half the data = %s." % (num_data // 2))
-    if type(ks) == type(None):
-        ks = 2 ** np.arange(1, int(np.ceil(np.log2(num_data // 2))))
-        
+
     result = {}
     for m in metrics:
         result['accuracy_%s' % m] = np.zeros((num_unit, num_unit, len(ks)))
