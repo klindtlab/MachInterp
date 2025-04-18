@@ -131,5 +131,5 @@ def compute_score(
     # fill all missing symmetrical comparisons
     for key in result:
         result[key] += np.transpose(result[key], (1, 0, 2))
-    result['ks'] = ks
+    result['ks'] = np.array(ks)
     return result
