@@ -117,7 +117,6 @@ def run_single_unit_psychophysics(
                     output['logits_%s' % key][quantile_index, trial_index] = extract_logits(
                         similarities, zscore, pool_fun)
                 
-
     # compute accuracy
     keys = list(output.keys())
     for key in keys:
@@ -127,7 +126,7 @@ def run_single_unit_psychophysics(
     return output
 
 
-def run_psychophysics(
+def compute_score(
         inputs: np.ndarray,
         activations: np.ndarray,
         metrics: dict[str, Metric],
@@ -157,7 +156,8 @@ def run_psychophysics(
     dict: A dict containing the logits and accuracy of the experiment.
     """
     assert len(activations.shape) == 2, "Activations must be a matrix, but have shape %s." % list(activations.shape)
-    if inputs.shape[0] != activations.shape[0]:
+    num_data, num_unit = activations.shape
+    if inputs.shape[0] != num_data:
         raise ValueError("Input and activations must have the same first dimension.")
     if not all(q1 <= q2 for q1, q2 in zip(quantiles, quantiles[1:])):
         raise ValueError("Quantiles must be in ascending order.")
@@ -165,13 +165,11 @@ def run_psychophysics(
         raise ValueError("First quantile must be >= 0.0.")
     if quantiles[-1] > 0.5:
         raise ValueError("Last quantile must be <= 0.5.")
-    max_trials = activations.shape[0] // ((num_references + 1) * 2)
-    if activations.shape[0] <= num_trials * (num_references + 1) * 2:
+    max_trials = num_data // ((num_references + 1) * 2)
+    if num_data <= num_trials * (num_references + 1) * 2:
         raise ValueError("Not enough data for the specified number of trials and references. At most num_trials=%s." % max_trials)
     
     result = {}
-    num_unit = activations.shape[1]
-
     for i in tqdm(range(num_unit)):
         output = run_single_unit_psychophysics(
             inputs=inputs, 
