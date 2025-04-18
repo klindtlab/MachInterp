@@ -106,10 +106,10 @@ def compute_score(
     num_data, num_unit = activations.shape
     if inputs.shape[0] != num_data:
         raise ValueError("Input and activations must have the same first dimension.")
-    if not all(q1 <= q2 for q1, q2 in zip(ks[:-1], ks[1:])):
-        raise ValueError("Ks must be in ascending order.")
     if type(ks) == type(None):
         ks = 2 ** np.arange(1, int(np.ceil(np.log2(num_data // 2))))
+    if not all(q1 <= q2 for q1, q2 in zip(ks[:-1], ks[1:])):
+        raise ValueError("Ks must be in ascending order.")
     if ks[0] < 2:
         raise ValueError("First k must be >= 2.")
     if ks[-1] > num_data // 2:
