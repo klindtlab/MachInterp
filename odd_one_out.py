@@ -93,6 +93,7 @@ def compute_score(
     if ks[-1] > num_data // 2:
         raise ValueError("Last k must be less than half the data = %s." % (num_data // 2))
     
+    result = {'ks': np.array(ks)}
     for i in tqdm(range(num_unit)):
         output = odd_one_out(
             inputs=inputs, 
@@ -106,5 +107,4 @@ def compute_score(
             result[key].append(output[key])
             if i == num_unit - 1:
                 result[key] = np.stack(result[key], 0)
-    result = {'ks': np.array(ks)}
     return result

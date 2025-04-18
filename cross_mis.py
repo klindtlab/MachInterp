@@ -114,6 +114,7 @@ def compute_score(
         raise ValueError("Last k must be less than half the data = %s." % (num_data // 2))
     
     num_unit = activations.shape[1]
+    result = {}
     for m in metrics:
         result['accuracy_%s' % m] = np.zeros((num_unit, num_unit, len(ks)))
     for i in tqdm(range(num_unit)):
@@ -130,5 +131,5 @@ def compute_score(
     # fill all missing symmetrical comparisons
     for key in result:
         result[key] += np.transpose(result[key], (1, 0, 2))
-    result = {'ks': np.array(ks)}
+    result['ks'] = ks
     return result
