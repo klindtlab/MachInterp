@@ -67,7 +67,7 @@ def compute_score(
         inputs: np.ndarray,
         activations: np.ndarray,
         metrics: dict[str, Metric],
-        ks: Optional[List[int]] = [2, 4, 6, 8, 16],
+        ks: Optional[List[int]] = [2, 4, 8, 16, 32],
         ):
     """
     Conducts an odd one out experiment on all single unit.
