@@ -183,7 +183,7 @@ def compute_score(
             seed=seed,
         )
         for key in output:
-            if len(result) == 1:
+            if key not in result:
                 result[key] = []
             result[key].append(output[key])
             if i == num_unit - 1:
