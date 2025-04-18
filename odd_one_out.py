@@ -102,7 +102,7 @@ def compute_score(
             ks=ks,
         )
         for key in output:
-            if len(result) == 0:
+            if len(result) == 1:
                 result[key] = []
             result[key].append(output[key])
             if i == num_unit - 1:
