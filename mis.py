@@ -169,7 +169,6 @@ def compute_score(
     if num_data <= num_trials * (num_references + 1) * 2:
         raise ValueError("Not enough data for the specified number of trials and references. At most num_trials=%s." % max_trials)
     
-    result = {'quantiles': np.array(quantiles)}
     for i in tqdm(range(num_unit)):
         output = run_single_unit_psychophysics(
             inputs=inputs, 
@@ -188,4 +187,5 @@ def compute_score(
             result[key].append(output[key])
             if i == num_unit - 1:
                 result[key] = np.stack(result[key], 0)
+    result = {'quantiles': np.array(quantiles)}
     return result
