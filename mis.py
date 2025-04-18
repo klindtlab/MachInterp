@@ -130,8 +130,8 @@ def compute_score(
         inputs: np.ndarray,
         activations: np.ndarray,
         metrics: dict[str, Metric],
-        quantiles: Optional[List[float]] = [0.0, 0.25], 
-        num_trials: int = 20, 
+        quantiles: Optional[List[float]] = [0, .1, .2, .3, .4, .5], 
+        num_trials: int = 50, 
         num_references: int = 9,
         pool_fun: callable = np.mean,  # min/max would not make sense with label
         zscore: bool = True,
