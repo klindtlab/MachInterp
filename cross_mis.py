@@ -87,7 +87,7 @@ def compute_score(
         inputs: np.ndarray,
         activations: np.ndarray,
         metrics: dict[str, Metric],
-        ks: Optional[List[int]] = [2, 4, 6, 8, 16],
+        ks: Optional[List[int]] = None,
         ):
     """
     Conducts a psychophysics experiment on all units.
@@ -97,7 +97,7 @@ def compute_score(
     inputs (np.ndarray): The input data for the experiment.
     activations (np.ndarray): The activations of a unit.
     metrics (dict[str, Metric]): The metrics to use.
-    ks (List[int], optional): The k top MEIs to consider. Defaults to [2, 4, 6, 8, 16].
+    ks (List[int], optional): The k top MEIs to consider. Defaults to all powers of 2 up to half the data.
 
     Returns:
     dict: A dict containing the logits and accuracy of the experiment.
@@ -112,8 +112,9 @@ def compute_score(
         raise ValueError("First k must be >= 2.")
     if ks[-1] > num_data // 2:
         raise ValueError("Last k must be less than half the data = %s." % (num_data // 2))
-    
-    num_unit = activations.shape[1]
+    if type(ks) == type(None):
+        ks = 2 ** np.arange(1, int(np.ceil(np.log2(num_data // 2))))
+        
     result = {}
     for m in metrics:
         result['accuracy_%s' % m] = np.zeros((num_unit, num_unit, len(ks)))
