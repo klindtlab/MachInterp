@@ -118,6 +118,9 @@ def compute_score(
     result = {}
     for m in metrics:
         result['accuracy_%s' % m] = np.zeros((num_unit, num_unit, len(ks)))
+        if m == 'lpips':
+            for i in range(1, 6):
+                result['accuracy_%s_%s' % (m, i)] = np.zeros((num_unit, num_unit, len(ks)))
     for i in tqdm(range(num_unit)):
         for j in range(i + 1, num_unit):
             output = cross_mis(
