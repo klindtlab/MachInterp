@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 
-def plotResults(results: dict, all_metrics: dict, codes: dict) -> None:
+def plotResults(results: dict, all_metrics: dict, codes: dict, identifier: str, region: str) -> None:
     """
     Plot MIS, OOO, and cross-MIS task results for all metrics.
 
@@ -34,25 +35,28 @@ def plotResults(results: dict, all_metrics: dict, codes: dict) -> None:
             for key, result in results.items():
                 acc = result[acc_key]
                 if 'quantiles' in result:
+                    task_type = 'MIS'
                     x = result['quantiles']
                     y = acc.mean(0)
                     yerr = acc.std(0) / np.sqrt(acc.shape[0])
                     ax_line.set_xlabel("quantile")
-                    title = f"MIS - {name}" if i == 0 else f"MIS - {name}_{i}"
+                    title = f"{task_type} - {name}" if i == 0 else f"MIS - {name}_{i}"
                 elif len(acc.shape) == 2:  # OOO
+                    task_type = 'OOO'
                     x = np.log2(result['ks'])
                     y = acc.mean(0)
                     yerr = acc.std(0) / np.sqrt(acc.shape[0])
                     ax_line.set_xlabel("K")
-                    title = f"OOO - {name}" if i == 0 else f"OOO - {name}_{i}"
+                    title = f"{task_type} - {name}" if i == 0 else f"OOO - {name}_{i}"
                 else:  # cross-MIS
+                    task_type = 'CrossMIS'
                     x = np.log2(result['ks'])
                     y = acc.mean((0, 1))
                     yerr = acc.std((0, 1)) / acc.shape[0]
                     ax_line.set_xlabel("K")
                     ax_line.set_xticks(np.log2(result['ks']))
                     ax_line.set_xticklabels(result['ks'])
-                    title = f"Cross MIS - {name}" if i == 0 else f"Cross MIS - {name}_{i}"
+                    title = f"{task_type} - {name}" if i == 0 else f"Cross MIS - {name}_{i}"
 
                 ax_line.errorbar(x, y, yerr=yerr, label=key)
                 ax_line.set_ylabel("accuracy")
@@ -77,4 +81,13 @@ def plotResults(results: dict, all_metrics: dict, codes: dict) -> None:
             ax_idx += 1
 
     plt.tight_layout()
-    plt.show()
+    
+    # Save to local folder (until grid permissions granted)
+    save_dir = './Results'
+    filename = f'{identifier}_{region}_{task_type}.png'
+    fig_path = os.path.join(save_dir, filename)
+    os.makedirs(save_dir, exist_ok=True)
+
+    fig.savefig(fig_path)
+    print(f"Saved: {fig_path}")
+    plt.close(fig)
