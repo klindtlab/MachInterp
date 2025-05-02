@@ -7,16 +7,21 @@ from metric import Metric
 
 
 def battle(sim):
-    """Tries to distinguish the MEIs to two units from their similarities."""
+    """Tries to distinguish the MEIs to two units from their similarities.
+    Compare every MEI from A to all other MEIs from A and all other MEIs
+    from B and decide which ones are more similar (same, vice versa, for B).
+    This gives two times the number of MEIs (K) comparisons that are right
+    or wrong {0, 1}, the average over all is the final accuracy.
+    """
     K = sim.shape[0] // 2
-    a_sim_a = (sim[:K, :K].sum(1) - 1) / (K - 1)  # remove self comparison
+    a_sim_a = np.sum(sim[:K, :K] - np.diag(np.diag(sim[:K, :K])), axis=1) / (K - 1)  # remove self comparison
+    b_sim_b = np.sum(sim[K:, K:] - np.diag(np.diag(sim[K:, K:])), axis=1) / (K - 1)  # remove self comparison
     a_sim_b = sim[:K, K:].mean(1)
-    b_sim_a = sim[K:, :K].mean()
-    b_sim_b = (sim[K:, K:].sum(1) - 1) / (K - 1)  # remove self comparison
-    logit_correct = a_sim_a + b_sim_b
-    logit_wrong = a_sim_b + b_sim_a
-    delta = logit_correct - logit_wrong
-    return delta
+    b_sim_a = sim[K:, :K].mean(1)
+    acc_a = a_sim_a > a_sim_b
+    acc_b = b_sim_b > b_sim_a
+    acc = np.concatenate([acc_a, acc_b]).mean() # average over all
+    return acc
 
 
 def cross_mis(
@@ -72,14 +77,12 @@ def cross_mis(
                 assert len(similarities.shape) == 3
                 for i in range(metric.num_scores):
                     if 'lpips' in key and i == 0:
-                        output['accuracy_lpips'][k_index] = np.mean(
-                            battle(similarities[:, :, i]) > 0)
+                        output['accuracy_lpips'][k_index] = battle(similarities[:, :, i])
                     else:
-                        output['accuracy_%s_%s' % (key, i)][k_index] = np.mean(
-                            battle(similarities[:, :, i]) > 0)
+                        output['accuracy_%s_%s' % (key, i)][k_index] = battle(similarities[:, :, i])
             else:
                 assert len(similarities.shape) == 2
-                output['accuracy_%s' % key][k_index] = np.mean(battle(similarities) > 0)
+                output['accuracy_%s' % key][k_index] = battle(similarities)
     return output
 
 
