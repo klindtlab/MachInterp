@@ -10,7 +10,7 @@ def odd_one_out(
         inputs: np.ndarray,
         activations: np.ndarray,
         metrics: dict[str, Metric],
-        ks: Optional[List[int]] = [2, 4, 6, 8, 16],
+        quantiles: Optional[List[float]] = [0.01,0.02,0.03,0.04,0.05],
     ):
     """
     Conducts an odd one out experiment on a single unit.
@@ -20,7 +20,7 @@ def odd_one_out(
     inputs (np.ndarray): The input data for the experiment.
     activations (np.ndarray): The activations of a unit.
     metrics (dict[str, Metric]): The metrics to use.
-    ks (List[int], optional): The k top MEIs to consider. Defaults to [2, 4, 6, 8, 16].
+    quantiles (List[float], optional): The % top MEIs to consider. Defaults to [0.01,0.02,0.03,0.04,0.05].
 
     Returns:
     The accuracy of the experiment.
@@ -29,7 +29,7 @@ def odd_one_out(
         raise ValueError("Activations must be a vector, but have shape %s." % list(activations.shape))
         
     output = dict()
-    get_array = lambda: np.zeros(len(ks))
+    get_array = lambda: np.zeros(len(quantiles)) # to: get_array = lambda: np.zeros(len(quantiles))
     for key, metric in metrics.items():
         if metric.num_scores > 1:
             for i in range(metric.num_scores):
@@ -41,7 +41,9 @@ def odd_one_out(
             output['accuracy_%s' % key] = get_array()
 
     ind_top = randomized_argsort(- activations)
-    for k_index, K in enumerate(ks):
+    for k_index, K_percent in enumerate(quantiles):
+        #convert quantile to K val
+        K = int(activations.shape[0]*K_percent)
         # Calculate similarities for each metric
         for key, metric in metrics.items():
             if metric.precomputed:
@@ -71,7 +73,7 @@ def compute_score(
         inputs: np.ndarray,
         activations: np.ndarray,
         metrics: dict[str, Metric],
-        ks: Optional[List[int]] = [2, 4, 8, 16, 32],
+        quantiles: Optional[List[float]] = [0.01,0.02,0.03,0.04,0.05],
         ):
     """
     Conducts an odd one out experiment on all single unit.
@@ -81,7 +83,7 @@ def compute_score(
     inputs (np.ndarray): The input data for the experiment.
     activations (np.ndarray): The activations of a unit.
     metrics (dict[str, Metric]): The metrics to use.
-    ks (List[int], optional): The k top MEIs to consider. Defaults to [2, 4, 6, 8, 16].
+    quantiles (List[float], optional): The % top MEIs to consider. Defaults to [0.01, 0.02, 0.03, 0.04, 0.05].
 
     Returns:
     dict: A dict containing the accuracy of the experiment.
@@ -90,20 +92,20 @@ def compute_score(
     num_data, num_unit = activations.shape
     if inputs.shape[0] != num_data:
         raise ValueError("Input and activations must have the same first dimension.")
-    if not all(q1 <= q2 for q1, q2 in zip(ks[:-1], ks[1:])):
-        raise ValueError("Ks must be in ascending order.")
-    if ks[0] < 2:
+    if not all(q1 <= q2 for q1, q2 in zip(quantiles[:-1], quantiles[1:])):
+        raise ValueError("Quantiles must be in ascending order.")
+    if int(quantiles[0]*num_data) < 2:
         raise ValueError("First k must be >= 2.")
-    if ks[-1] > num_data // 2:
+    if int(quantiles[-1]*num_data) > num_data // 2:
         raise ValueError("Last k must be less than half the data = %s." % (num_data // 2))
     
-    result = {'ks': np.array(ks)}
+    result = {'quantiles': np.array(quantiles)}
     for i in tqdm(range(num_unit)):
         output = odd_one_out(
             inputs=inputs, 
             activations=activations[:, i], 
             metrics=metrics, 
-            ks=ks,
+            quantiles=quantiles,
         )
         for key in output:
             if key not in result:
