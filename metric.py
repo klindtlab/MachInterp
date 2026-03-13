@@ -1,8 +1,11 @@
 import numpy as np
 from tqdm import tqdm
+from PIL import Image
+
 import torch
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
+from torchvision.transforms import ToPILImage
 
 
 class Metric:
@@ -17,7 +20,8 @@ class Metric:
     def __init__(self):
         self.precomputed = False
         self.num_scores = 1  # only relevant for LPIPS with multiple outputs
-
+        self._to_pil = ToPILImage()
+    
     def _to_tensor(self, inputs):
         if isinstance(inputs, np.ndarray):
             return torch.from_numpy(inputs)
@@ -59,9 +63,9 @@ class Metric:
         """Precompute Similarities for entire dataset."""
         N = inputs.shape[0]
         if self.num_scores > 1:
-            self.similarity_matrix = np.zeros((N, N, self.num_scores))
+            self.similarity_matrix = np.zeros((N, N, self.num_scores), dtype=np.float32)
         else:
-            self.similarity_matrix = np.zeros((N, N))
+            self.similarity_matrix = np.zeros((N, N), dtype=np.float32)
         for i in tqdm(range(0, N, batch_size)):
             end_i = min(i + batch_size, N)
             x_i = inputs[i:end_i]
@@ -98,14 +102,18 @@ class DreamSimMetric(Metric):
         super().__init__()
         self.device = device
         from dreamsim import dreamsim
-        self.model, _ = dreamsim(pretrained=True, device=self.device)
+        self.model, self.pil_preprocess = dreamsim(pretrained=True, device=self.device)
         self.model.eval()
         self.embed_fn = self.model.embed
         self.precomputed = False
 
     def preprocess(self, inputs):
         tensor = self._to_tensor(inputs)
-        return tensor.to(torch.float32)
+        assert len(tensor.shape) == 4
+        images = [self._to_pil(tensor_im) for tensor_im in tensor]
+        preprocessed = [ self.pil_preprocess(image) for image in images ]
+
+        return torch.concat(preprocessed, dim=0)
 
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
@@ -117,7 +125,7 @@ class DreamSimMetric(Metric):
             embed_B = self.embed_fn(batch_B.to(self.device))
             similarity_matrix = F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1)
         return similarity_matrix.cpu().numpy()
-    
+
     def precompute(self, inputs, batch_size: int = 256, embeddings_only: bool = False):
         """
         Precompute embeddings for all inputs.
@@ -126,8 +134,8 @@ class DreamSimMetric(Metric):
         """
         print('Embedding images.')
         dataloader = torch.utils.data.DataLoader(
-            TensorDataset(self._to_tensor(inputs).to(torch.float32)),
-            batch_size=batch_size, 
+            TensorDataset(self.preprocess(inputs)),
+            batch_size=batch_size,
             shuffle=False
         )
         embeddings = []
@@ -175,10 +183,10 @@ class LPIPSMetric(Metric):
     def preprocess(self, inputs):
         tensor = self._to_tensor(inputs)
         if tensor.dtype == torch.uint8:
-            tensor = tensor.to(torch.float32) / 255 * 2 - 1
-        assert tensor.min() >= -1 and tensor.max() <= 1, "Input images must be normalized to [-1, 1]"        
+            tensor = (2 * tensor.to(torch.float32) / 255) - 1
+        assert tensor.min() >= -1 and tensor.max() <= 1, "Input images must be normalized to [-1, 1]"
         return tensor.to(torch.float32)
-    
+
     def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
         Compute LPIPS similarity between every pair in the two batches.
@@ -186,8 +194,8 @@ class LPIPSMetric(Metric):
         """
         with torch.no_grad():
             output = self.loss_fn(
-                batch_A.to(self.device), batch_B.to(self.device), 
-                normalize=True, retPerLayer=True)
+                batch_A.to(self.device), batch_B.to(self.device),
+                normalize=False, retPerLayer=True)
             output = torch.stack([output[0]] + output[1], dim=-1)
         return - output.detach().cpu().numpy()
 
