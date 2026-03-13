@@ -50,7 +50,7 @@ def odd_one_out(
                 similarities = metric.compute_similarity(inputs[ind_top], inputs[ind_top[:K]])
             if metric.num_scores > 1:
                 for i in range(metric.num_scores):
-                    threshold = np.mean( np.sum(similarities[:K, :K, i] - np.diag(np.diag(similarities[:K, :K, i])), axis=1) / (K-1) ) # per layer
+                    threshold = similarities[:K, :, i].mean()  # per layer
                     if 'lpips' in key and i == 0:
                         output['accuracy_lpips'][k_index] = np.mean(
                             similarities[K:, :, i].mean(1) < threshold)
@@ -58,12 +58,9 @@ def odd_one_out(
                         output['accuracy_%s_%s' % (key, i)][k_index] = np.mean(
                             similarities[K:, :, i].mean(1) < threshold)
             else:
-                threshold = np.mean( np.sum(similarities[:K, :K] - np.diag(np.diag(similarities[:K, :K])), axis=1) / (K-1) )
-
+                threshold = similarities[:K].mean()
                 output['accuracy_%s' % key][k_index] = np.mean(
                     similarities[K:].mean(1) < threshold)
-                
-                
     return output
 
 
