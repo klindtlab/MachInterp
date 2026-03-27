@@ -1,0 +1,5 @@
+models/
+.ipynb_checkpoints/
+__pycache__/
+tests/.ipynb_checkpoints/
+local_notebooks/

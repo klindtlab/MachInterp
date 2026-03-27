@@ -1,1 +1,4 @@
-torch>=2.3.1
+# use custom lpips version with batch support
+# pip install git+https://github.com/david-klindt/PerceptualSimilarity.git@batched
+
+# dreamsim
