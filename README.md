@@ -1,6 +1,6 @@
 # MIS: Machine Interpretability Scoring
 
-This repository contains the official codebase and supplementary materials for the paper **[Mechanistic Interpretability through Superposition]** by [Your Name and Co-authors]. The work explores the mechanisms underlying superposition in neural networks, providing insights into representation disentanglement.
+This repository contains implementation of large-scale neural network interpretability measurement outlined in **[Measuring Mechanistic Interpretability at Scale Without Humans]**. This work explores the mechanisms underlying superposition in neural networks, providing insights into representation disentanglement. This codebase is primarily developed and maintained by Sung Ching (Sunny) Liu.
 
 📄 **Read the paper**: [https://brendel-group.github.io/mis/](https://brendel-group.github.io/mis/)
 
