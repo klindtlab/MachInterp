@@ -10,7 +10,7 @@ def odd_one_out(
         inputs: np.ndarray,
         activations: np.ndarray,
         metrics: dict[str, Metric],
-        quantiles: Optional[List[float]] = [0.01,0.02,0.03,0.04,0.05],
+        quantiles: Optional[List[float]] = [0.0025,0.005,0.01],
     ):
     """
     Conducts an odd one out experiment on a single unit.
@@ -73,7 +73,7 @@ def compute_score(
         inputs: np.ndarray,
         activations: np.ndarray,
         metrics: dict[str, Metric],
-        quantiles: Optional[List[float]] = [0.01,0.02,0.03,0.04,0.05],
+        quantiles: Optional[List[float]] = [0.0025,0.005,0.01],
         ):
     """
     Conducts an odd one out experiment on all single unit.

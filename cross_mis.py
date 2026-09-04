@@ -29,7 +29,7 @@ def cross_mis(
         activations_a: np.ndarray,
         activations_b: np.ndarray,
         metrics: dict[str, Metric],
-        ks: Optional[List[int]] = [2, 4, 6, 8, 16],
+        quantiles: Optional[List[float]] = [0.01, 0.02, 0.03, 0.04, 0.05],
     ):
     """
     Conducts a cross-MIS experiment: can you distinguish two units MEIs
@@ -39,7 +39,7 @@ def cross_mis(
     activations_a (np.ndarray): The activations of a unit.
     activations_b (np.ndarray): The activations of a unit.
     metrics (dict[str, Metric]): The metrics to use.
-    ks (List[int], optional): The k top MEIs to consider. Defaults to [2, 4, 6, 8, 16].
+    quantiles (List[float], optional): The % top MEIs to consider. Defaults to [0.01, 0.02, 0.03, 0.04, 0.05].
 
     Returns:
     The accuracy of the experiment.
@@ -52,7 +52,7 @@ def cross_mis(
         raise ValueError("Activations must have same shape.")
         
     output = dict()
-    get_array = lambda: np.zeros(len(ks))
+    get_array = lambda: np.zeros(len(quantiles))
     for key, metric in metrics.items():
         if metric.num_scores > 1:
             for i in range(metric.num_scores):
@@ -65,7 +65,9 @@ def cross_mis(
 
     ind_top_a = randomized_argsort(- activations_a)
     ind_top_b = randomized_argsort(- activations_b)
-    for k_index, K in enumerate(ks):
+    for k_index, K_percent in enumerate(quantiles):
+        #convert quantile to K val
+        K = int(activations_a.shape[0]*K_percent)
         ind_top = np.concatenate([ind_top_a[:K], ind_top_b[:K]])
         # Calculate similarities for each metric
         for key, metric in metrics.items():
@@ -90,7 +92,7 @@ def compute_score(
         inputs: np.ndarray,
         activations: np.ndarray,
         metrics: dict[str, Metric],
-        ks: Optional[List[int]] = None,
+        quantiles: Optional[List[float]] = None,
         ):
     """
     Conducts a psychophysics experiment on all units.
@@ -109,21 +111,21 @@ def compute_score(
     num_data, num_unit = activations.shape
     if inputs.shape[0] != num_data:
         raise ValueError("Input and activations must have the same first dimension.")
-    if type(ks) == type(None):
-        ks = 2 ** np.arange(1, int(np.ceil(np.log2(num_data // 2))))
-    if not all(q1 <= q2 for q1, q2 in zip(ks[:-1], ks[1:])):
-        raise ValueError("Ks must be in ascending order.")
-    if ks[0] < 2:
-        raise ValueError("First k must be >= 2.")
-    if ks[-1] > num_data // 2:
-        raise ValueError("Last k must be less than half the data = %s." % (num_data // 2))
+    if type(quantiles) == type(None):
+        quantiles = [0.01, 0.02, 0.03, 0.04, 0.05]
+    if not all(q1 <= q2 for q1, q2 in zip(quantiles[:-1], quantiles[1:])):
+        raise ValueError("quantiles must be in ascending order.")
+    if int(quantiles[0]*num_data) < 2:
+        raise ValueError("First quantile must be >= 2.")
+    if quantiles[-1] > num_data // 2:
+        raise ValueError("Last quantile must be less than half the data = %s." % (num_data // 2))
 
     result = {}
     for m in metrics:
-        result['accuracy_%s' % m] = np.zeros((num_unit, num_unit, len(ks)))
+        result['accuracy_%s' % m] = np.zeros((num_unit, num_unit, len(quantiles)))
         if m == 'lpips':
             for i in range(1, 6):
-                result['accuracy_%s_%s' % (m, i)] = np.zeros((num_unit, num_unit, len(ks)))
+                result['accuracy_%s_%s' % (m, i)] = np.zeros((num_unit, num_unit, len(quantiles)))
     for i in tqdm(range(num_unit)):
         for j in range(i + 1, num_unit):
             output = cross_mis(
@@ -131,12 +133,12 @@ def compute_score(
                 activations_a=activations[:, i], 
                 activations_b=activations[:, j], 
                 metrics=metrics, 
-                ks=ks
+                quantiles=quantiles
             )
             for key in output:
                 result[key][i, j] = output[key]
     # fill all missing symmetrical comparisons
     for key in result:
         result[key] += np.transpose(result[key], (1, 0, 2))
-    result['ks'] = np.array(ks)
+    result['quantiles'] = np.array(quantiles)
     return result
