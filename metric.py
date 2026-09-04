@@ -1,265 +1,277 @@
+import numpy as np
+from tqdm import tqdm
+from PIL import Image
+
 import torch
-from torch.utils.data import DataLoader
 import torch.nn.functional as F
-from torchvision.transforms import ToTensor
+from torch.utils.data import TensorDataset, DataLoader
+from torchvision.transforms import ToPILImage
 
 
-def get_lpips(device):
+class Metric:
     """
-    Get LPIPS similarity metric and preprocessing functions.
-
-    Args:
-        device: Device to load model on ('cpu' or 'cuda')
-
-    Returns:
-        tuple: (sim_metric, preprocess_ds)
-            - sim_metric: Function that computes LPIPS similarity between two image tensors
-            - preprocess_ds: Function that preprocesses a dataset of images for LPIPS
-    """
-    from lpips import LPIPS
-    loss_fn = LPIPS(net='alex').to(device)
-    to_tensor_inst = ToTensor()
-
-    def sim_metric(im_tensor0, im_tensor1):
-        assert len(im_tensor0.shape) in (3, 4)
-        assert len(im_tensor1.shape) in (3, 4)
-        if len(im_tensor0.shape) == 3:
-            im_tensor0 = im_tensor0.unsqueeze(0)
-        if len(im_tensor1.shape) == 3:
-            im_tensor1 = im_tensor1.unsqueeze(0)
-
-        loss_fn.eval()
-        with torch.no_grad():
-            output = - loss_fn(im_tensor0.to(device), im_tensor1.to(device))
-
-        return output
-
-    def preprocess(im):
-        return (2 * to_tensor_inst(im) - 1).unsqueeze(0)
+    Abstract base class for different metrics.
     
-    def collator(batch: list):
-        output = [preprocess(image) for image in batch]
-        return torch.cat(output, dim=0)
+    Subclasses must implement:
+      - preprocess: convert raw inputs (e.g., numpy arrays, torch tensors, list of file paths)
+                     into a common format for similarity computation.
+      - similarity: compute a pairwise similarity matrix between two batches.
+    """
+    def __init__(self):
+        self.precomputed = False
+        self.num_scores = 1  # only relevant for LPIPS with multiple outputs
+        self._to_pil = ToPILImage()
+    
+    def _to_tensor(self, inputs):
+        if isinstance(inputs, np.ndarray):
+            return torch.from_numpy(inputs)
+        elif torch.is_tensor(inputs):
+            return inputs
+        else:
+            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
+    
+    def _to_numpy(self, inputs):
+        if isinstance(inputs, np.ndarray):
+            return inputs
+        elif torch.is_tensor(inputs):
+            return inputs.cpu().numpy()
+        else:
+            raise ValueError("Unsupported input type. Only numpy arrays and torch tensors are supported.")
 
-    def preprocess_ds(ds):
-        ds_loader = DataLoader(ds, batch_size=64,
-                               shuffle=False, num_workers=2*torch.cuda.device_count(),
-                               collate_fn=collator)
+    def preprocess(self, inputs):
+        raise NotImplementedError('Subclasses must implement preprocess')
 
+    def similarity(self, batch_A, batch_B) -> np.ndarray:
+        raise NotImplementedError('Subclasses must implement similarity')
+
+    def compute_similarity(self, batch_A, batch_B) -> np.ndarray:
+        """
+        Convenience method that wraps the similarity computation.
+        """
         try:
-            from tqdm import tqdm
-            loader_loop = tqdm(enumerate(ds_loader), total=len(ds_loader) )
-        except ImportError:
-            loader_loop = enumerate(ds_loader)
-
-        im_tensor_set=[]
-        print("Preprocessing images for LPIPS...")
-        for _ , X in loader_loop:
-            im_tensor_set.append( X.to(device) )
-
-        return torch.cat(im_tensor_set, dim=0)
-
-
-    return sim_metric , preprocess_ds
-
-
-def get_dreamsim(device):
-    """
-    Get DreamSim similarity metric and preprocessing functions.
-
-    Args:
-        device: Device to load model on ('cpu' or 'cuda')
-
-    Returns:
-        tuple: (sim_metric, preprocess_embed_ds)
-            - sim_metric: Function that computes cosine similarity between DreamSim embeddings
-            - preprocess_embed_ds: Function that preprocesses and embeds a dataset of images
-    """
-    from dreamsim import dreamsim
-
-    model, preprocess = dreamsim(pretrained=True, device=device)
-
-    embed_fn = model.embed
-
-    def sim_metric(embed1, embed2):
-        if len(embed1.shape)==1:
-            embed1 = embed1.unsqueeze(0)
-        if len(embed2.shape)==1:
-            embed2 = embed2.unsqueeze(0)
-
-        return F.cosine_similarity(embed1[:, None], embed2[None], dim=-1)
-    
-    def collator(batch: list):
-        output = [preprocess(image) for image in batch]
-        return torch.cat(output, dim=0)
-
-    def preprocess_embed_ds(ds):
-        ds_loader = DataLoader(ds, batch_size=64,
-                               shuffle=False, num_workers=2*torch.cuda.device_count(),
-                               collate_fn=collator)
-
+            pre_A = self.preprocess(batch_A)
+            pre_B = self.preprocess(batch_B)
+        except Exception as e:
+            raise ValueError(f"Error during preprocessing: {e}")
         try:
-            from tqdm import tqdm
-            loader_loop = tqdm(enumerate(ds_loader), total=len(ds_loader) )
-        except ImportError:
-            loader_loop = enumerate(ds_loader)
+            sim = self.similarity(pre_A, pre_B)
+        except Exception as e:
+            raise ValueError(f"Error during similarity computation: {e}")
+        return sim
+    
+    def precompute(self, inputs, batch_size):
+        """Precompute Similarities for entire dataset."""
+        N = inputs.shape[0]
+        if self.num_scores > 1:
+            self.similarity_matrix = np.zeros((N, N, self.num_scores), dtype=np.float32)
+        else:
+            self.similarity_matrix = np.zeros((N, N), dtype=np.float32)
+        for i in tqdm(range(0, N, batch_size)):
+            end_i = min(i + batch_size, N)
+            x_i = inputs[i:end_i]
+            for j in range(0, N, batch_size):
+                end_j = min(j + batch_size, N)
+                x_j = inputs[j:end_j]
+                self.similarity_matrix[i:end_i, j:end_j] = self.compute_similarity(x_i, x_j)
+        self.precomputed = True
+        print('Precomputed similarities. Now, use precomputed_similarity with indices!')
+        print('You can also save metric.similarity_matrix and use it to initialize PrecomputedMetric')
+        print('this is to avoid precomputing next time.')
+    
+    def precomputed_similarity(self, ind_batch_A, ind_batch_B) -> np.ndarray:
+        assert self.precomputed, "Precomputed embeddings are not available"
+        assert len(ind_batch_A.shape) == 1 and len(ind_batch_B.shape) == 1, "inputs must be 1D arrays of indices"
+        ind_batch_A = self._to_numpy(ind_batch_A).astype(int)
+        ind_batch_B = self._to_numpy(ind_batch_B).astype(int)
+        return self.similarity_matrix[np.ix_(ind_batch_A, ind_batch_B)]
+    
 
-        print("Preprocessing images for DREAMSIM...")
-        embedding = []
-        model.eval()
+class PrecomputedMetric(Metric):
+    def __init__(self, similarity_matrix):
+        super().__init__()
+        shape = similarity_matrix.shape
+        assert shape[0] == shape[1], "similarity_matrix must be square."
+        self.similarity_matrix = self._to_numpy(similarity_matrix)
+        self.precomputed = True
+        if len(shape) > 2:
+            self.num_scores = shape[2]
+
+
+class DreamSimMetric(Metric):
+    def __init__(self, device: str = 'cpu'):
+        super().__init__()
+        self.device = device
+        from dreamsim import dreamsim
+        self.model, self.pil_preprocess = dreamsim(pretrained=True, device=self.device)
+        self.model.eval()
+        self.embed_fn = self.model.embed
+        self.precomputed = False
+
+    def preprocess(self, inputs):
+        tensor = self._to_tensor(inputs)
+        assert len(tensor.shape) == 4
+        images = [self._to_pil(tensor_im) for tensor_im in tensor]
+        preprocessed = [ self.pil_preprocess(image) for image in images ]
+
+        return torch.concat(preprocessed, dim=0)
+
+    def similarity(self, batch_A, batch_B) -> np.ndarray:
+        """
+        Compute cosine similarity between embeddings.
+        Converts numpy arrays to torch tensors if needed.
+        """
         with torch.no_grad():
-            for _ , X in loader_loop:
-                embedding.append( embed_fn(X.to(device)) )
+            embed_A = self.embed_fn(batch_A.to(self.device))
+            embed_B = self.embed_fn(batch_B.to(self.device))
+            similarity_matrix = F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1)
+        return similarity_matrix.cpu().numpy()
 
-        return torch.cat(embedding, dim=0)
+    def precompute(self, inputs, batch_size: int = 256, embeddings_only: bool = False):
+        """
+        Precompute embeddings for all inputs.
+        The batch_size is just for precomputing of embeddings.
+        Use embeddings_only for very large datasets that give OOM.
+        """
+        print('Embedding images.')
+        dataloader = torch.utils.data.DataLoader(
+            TensorDataset(self.preprocess(inputs)),
+            batch_size=batch_size,
+            shuffle=False
+        )
+        embeddings = []
+        with torch.no_grad():
+            for batch in tqdm(dataloader):
+                embeddings.append(self.embed_fn(batch[0].to(self.device)).cpu())
+        self.model.cpu()
+        self.embeddings = torch.cat(embeddings, dim=0)
+        assert self.embeddings.shape[0] == len(inputs), "Embedding shape does not match input length"
+        self.precomputed = True
+        self.embeddings_only = embeddings_only
+        if not self.embeddings_only:
+            print("Computing similarities.")
+            self.similarity_matrix = F.cosine_similarity(
+                self.embeddings[:, None], self.embeddings[None], dim=-1).numpy()
+        print('Dreamsim: Precomputed embeddings and similarities. Now, use precomputed_similarity with indices!')
+        print('You can also save metric.similarity_matrix and use it to initialize PrecomputedMetric')
+        print('this is to avoid precomputing next time.')
 
-    return sim_metric, preprocess_embed_ds
+    def precomputed_similarity(self, ind_batch_A, ind_batch_B) -> np.ndarray:
+        assert self.precomputed, "Precomputed embeddings are not available"
+        assert len(ind_batch_A.shape) == 1 and len(ind_batch_B.shape) == 1, "inputs must be 1D arrays of indices"
+        if self.embeddings_only:
+            ind_batch_A = self._to_tensor(ind_batch_A).to(torch.int64)
+            ind_batch_B = self._to_tensor(ind_batch_B).to(torch.int64)
+            embed_A = self.embeddings[ind_batch_A]
+            embed_B = self.embeddings[ind_batch_B]
+            return F.cosine_similarity(embed_A[:, None], embed_B[None], dim=-1).cpu().numpy()
+        else:
+            ind_batch_A = self._to_numpy(ind_batch_A).astype(int)
+            ind_batch_B = self._to_numpy(ind_batch_B).astype(int)
+            return self.similarity_matrix[np.ix_(ind_batch_A, ind_batch_B)]
 
 
-def get_metric_preprocess(metric_type: str, device=torch.device("cuda" if torch.cuda.is_available() else 'cpu')):
-    """
-    Get similarity metric and preprocessing functions for specified metric type.
+class LPIPSMetric(Metric):
+    def __init__(self, device: str = 'cpu'):
+        super().__init__()
+        self.device = device
+        # use custom lpips version with batch support
+        # https://github.com/david-klindt/PerceptualSimilarity/tree/batched
+        from lpips import LPIPS
+        self.loss_fn = LPIPS(net='alex').eval().to(self.device)
+        self.num_scores = 6  # total and layers 1, 2, 3, 4, 5
 
-    Args:
-        metric_type: Type of metric to get ('dreamsim' or 'lpips')
-        device: Device to load model on ('cpu' or 'cuda')
+    def preprocess(self, inputs):
+        tensor = self._to_tensor(inputs)
+        if tensor.dtype == torch.uint8:
+            tensor = (2 * tensor.to(torch.float32) / 255) - 1
+        assert tensor.min() >= -1 and tensor.max() <= 1, "Input images must be normalized to [-1, 1]"
+        return tensor.to(torch.float32)
 
-    Returns:
-        tuple: (metric_fn, preprocess_fn)
-            - metric_fn: Function that computes similarity between images/embeddings
-            - preprocess_fn: Function that preprocesses images for the metric
+    def similarity(self, batch_A, batch_B) -> np.ndarray:
+        """
+        Compute LPIPS similarity between every pair in the two batches.
+        Returns negative LPIPS distance as similarity.
+        """
+        with torch.no_grad():
+            output = self.loss_fn(
+                batch_A.to(self.device), batch_B.to(self.device),
+                normalize=False, retPerLayer=True)
+            output = torch.stack([output[0]] + output[1], dim=-1)
+        return - output.detach().cpu().numpy()
 
-    Raises:
-        AssertionError: If metric_type is not 'dreamsim' or 'lpips'
-    """
-    metric_type = metric_type.lower()
-    assert metric_type in ["dreamsim", "lpips"]
 
-    if metric_type == "dreamsim":
-        return get_dreamsim(device)
-    if metric_type == "lpips":
-        return get_lpips(device)
+class SSIMMetric(Metric):
+    def __init__(self):
+        super().__init__()
+        from skimage.metrics import structural_similarity as ssim_func
+        self.ssim_func = ssim_func
+
+    def preprocess(self, inputs):
+        inputs = self._to_numpy(inputs)
+        if inputs.dtype == np.uint8:
+            inputs = inputs.astype(np.float32) / 255 * 2 - 1
+        assert inputs.min() >= -1 and inputs.max() <= 1, "Input images must be normalized to [-1, 1]"   
+        return inputs.astype(np.float32)
+
+    def similarity(self, batch_A, batch_B) -> np.ndarray:
+        """
+        Compute SSIM (Structural Similarity Index) between every pair.
+        Converts images to grayscale if necessary.
+        """
+        num_A = len(batch_A)
+        num_B = len(batch_B)
+        similarity_matrix = np.zeros((num_A, num_B))
+        for i in range(num_A):
+            for j in range(num_B):
+                similarity_matrix[i, j] = self.ssim_func(
+                    batch_A[i], batch_B[j], channel_axis=0, data_range=2)
+        return similarity_matrix
+
+
+class MSEMetric(Metric):
+    def __init__(self):
+        super().__init__()
+
+    def preprocess(self, inputs):
+        return self._to_tensor(inputs).to(torch.float32)
+
+    def similarity(self, batch_A, batch_B) -> np.ndarray:
+        """
+        Compute negative mean squared error between every pair.
+        """
+        flat_A = torch.flatten(batch_A, start_dim=1)
+        flat_B = torch.flatten(batch_B, start_dim=1)
+        # Compute pairwise differences using broadcasting.
+        mse = torch.mean((flat_A[:, None, :] - flat_B[None, :, :]) ** 2, dim=-1)
+        return -mse
     
 
-class Metric_Preprocess:
-    """
-    A singleton class that stores and manages metric and preprocessing functions.
+class CosineMetric(Metric):
+    def __init__(self, epsilon: float = 1e-8):
+        super().__init__()
+        self.epsilon = epsilon
 
-    This class caches metric functions and their corresponding preprocessing functions
-    to avoid reloading them multiple times. It uses a tuple of (metric_type, device) 
-    as keys to store and retrieve the functions.
+    def preprocess(self, inputs):
+        return self._to_tensor(inputs).to(torch.float32)
 
-    Attributes:
-        _instance: Class variable storing the singleton instance
-        _metric: Dictionary storing metric functions keyed by (metric_type, device)
-        _preprocess: Dictionary storing preprocessing functions keyed by (metric_type, device)
-
-    Methods:
-        __call__(metric_type, device): Get both metric and preprocess functions
-        process(dataset, metric_type, device): Preprocess a dataset using cached function
-        get_metric(metric_type, device): Get just the metric function
-    """
-    _instance = None
-    _metric = {}
-    _preprocess = {}
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            # Create a new instance if one doesn't already exist
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def __init__(self, metric_type: str=None, device: str=None):
+    def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
-        Initialize or update the singleton instance.
-
-        Args:
-            metric_type: Type of metric to load ('dreamsim' or 'lpips')
-            device: Device to load the metric on ('cpu' or 'cuda')
+        Compute cosine similarity between every pair.
         """
-        # Update the value every time the instance is called
-        if metric_type is not None and device is not None:
-            key = (metric_type, device)
-            if not key in self._metric.keys():
-                self._metric[key] , self._preprocess[key] = get_metric_preprocess(metric_type , device)
+        flat_A = torch.flatten(batch_A, start_dim=1)
+        flat_B = torch.flatten(batch_B, start_dim=1)
+        return F.cosine_similarity(flat_A[:, None], flat_B[None], dim=-1).cpu().numpy()
 
-    def __call__(self, metric_type: str, device: str):
+
+class LabelMetric(Metric):
+    def __init__(self):
+        super().__init__()
+
+    def preprocess(self, inputs):
+        return self._to_numpy(inputs)
+
+    def similarity(self, batch_A, batch_B) -> np.ndarray:
         """
-        Get metric and preprocessing functions for given type and device.
-
-        Args:
-            metric_type: Type of metric ('dreamsim' or 'lpips')
-            device: Device to use ('cpu' or 'cuda')
-
-        Returns:
-            Tuple of (metric_function, preprocess_function)
+        Compute similarity based on equality: 1 if labels are equal, 0 otherwise.
         """
-        key = (metric_type, device)
-        if not key in self._metric.keys():
-            self._metric[key] , self._preprocess[key] = get_metric_preprocess(metric_type , device)
-        return self._metric[key] , self._preprocess[key]
-    
-    def process(self, dataset, metric_type: str, device: str):
-        """
-        Preprocess a dataset using cached preprocessing function.
-
-        Args:
-            dataset: Dataset to preprocess
-            metric_type: Type of metric preprocessing to use
-            device: Device to preprocess on
-
-        Returns:
-            Preprocessed dataset
-        """
-        key = (metric_type, device)
-        if not key in self._metric.keys():
-            self._metric[key] , self._preprocess[key] = get_metric_preprocess(metric_type , device)
-        
-        return self._preprocess[key](dataset)
-    
-    def get_metric(self, metric_type: str, device: str):
-        """
-        Get metric function for given type and device.
-
-        Args:
-            metric_type: Type of metric to get
-            device: Device to get metric for
-
-        Returns:
-            Metric function
-        """
-        key = (metric_type, device)
-        if not key in self._metric.keys():
-            self._metric[key] , self._preprocess[key] = get_metric_preprocess(metric_type , device)
-        return self._metric[key]
-    
-
-def process(dataset, metric_type: str, device):
-    """
-    Preprocess a dataset using the specified metric type and device.
-
-    Args:
-        dataset: Dataset to preprocess
-        metric_type: Type of metric preprocessing to use ('dreamsim' or 'lpips')
-        device: Device to preprocess on ('cpu' or 'cuda')
-
-    Returns:
-        Preprocessed dataset
-    """
-    wrapper = Metric_Preprocess()
-    return wrapper.process(dataset, metric_type, device)
-
-
-def get_metric(metric_type: str, device):
-    """
-    Get metric function for the specified type and device.
-
-    Args:
-        metric_type: Type of metric to get ('dreamsim' or 'lpips')
-        device: Device to get metric for ('cpu' or 'cuda')
-
-    Returns:
-        Metric function for computing similarity between images
-    """
-    wrapper = Metric_Preprocess()
-    return wrapper.get_metric(metric_type, device)
+        return (np.array(batch_A)[:, None] == np.array(batch_B)[None, :]).astype(float)

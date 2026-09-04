@@ -1,0 +1,16 @@
+ann_ablation_anthology_ttest.csv
+bnn_ablation_anthology_ttest.csv
+[0-9]*
+*plots/
+*results/
+meis_grid.png
+logs/
+precompute.ipynb
+kruskal_wallis
+subsampled_codes/
+subsampled_codes_centers/
+models/
+.ipynb_checkpoints/
+__pycache__/
+tests/.ipynb_checkpoints/
+local_notebooks/
