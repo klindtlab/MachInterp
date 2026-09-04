@@ -1,7 +1,8 @@
+ann_ablation_anthology_ttest.csv
+bnn_ablation_anthology_ttest.csv
 [0-9]*
 *plots/
 *results/
-fast_cross_mis.py
 meis_grid.png
 logs/
 precompute.ipynb
